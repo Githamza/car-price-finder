@@ -4,10 +4,10 @@ import { MapLegendProps } from "../types";
 const MapLegend: React.FC<MapLegendProps> = ({ showSelected = true }) => {
   return (
     <div className="map-legend">
-      {/* Cluster representation for when zoomed out */}
+      {/* Flow view for when zoomed out */}
       <div className="mb-2 pb-2 border-b border-gray-200">
         <div className="text-xs font-semibold mb-1">
-          Vue large (zoom faible)
+          Vue flux (zoom faible)
         </div>
         <div className="legend-item">
           <div
@@ -18,13 +18,24 @@ const MapLegend: React.FC<MapLegendProps> = ({ showSelected = true }) => {
               height: "16px",
             }}
           ></div>
-          <div className="legend-label">Cluster de trajets</div>
+          <div className="legend-label">Zone (taille = activité)</div>
+        </div>
+        <div className="legend-item">
+          <svg width="24" height="12" className="mr-2">
+            <path
+              d="M 1 10 Q 12 0 23 10"
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="2.5"
+            />
+          </svg>
+          <div className="legend-label">Flux entre zones</div>
         </div>
         <div className="text-xs text-gray-500 mt-1">
-          Taille = nombre de trajets
+          Épaisseur = nombre de trajets
         </div>
         <div className="text-xs text-gray-500">
-          Couleur = densité de trajets
+          Cliquez une zone pour isoler ses flux
         </div>
       </div>
 

@@ -16,24 +16,43 @@ import {
   formatMonthFromTitle,
   formatNumber,
 } from "../utils/format";
+import { useTripIndex, isClusterFeature } from "../hooks/useTripIndex";
 import {
-  useTripIndex,
-  IndexedTrips,
-  isClusterFeature,
-} from "../hooks/useTripIndex";
-import { MIN_ZOOM_FOR_TRIPS, MAX_VISIBLE_TRIPS } from "../config";
+  buildFlowModel,
+  cellSizeForZoom,
+  arcPoints,
+  arrowPoints,
+  Flow,
+  FlowModel,
+  FlowZone,
+} from "../map/flows";
+import {
+  MIN_ZOOM_FOR_TRIPS,
+  MAX_VISIBLE_TRIPS,
+  MAX_VISIBLE_FLOWS,
+} from "../config";
 import {
   MapProps,
   MapEventHandlerProps,
   TripPopupProps,
   Trip,
-  ClusterView,
 } from "../types";
 import teamWheelsLogo from "../assets/images/logo.png";
 
 // Center of France for initial map view
 const DEFAULT_CENTER: [number, number] = [46.603354, 1.888334];
 const DEFAULT_ZOOM = 6;
+
+const FLOW_COLOR = "#3b82f6";
+const FLOW_IN_COLOR = "#ff3388"; // incoming flows when a zone is isolated
+
+// A flow ready to render: endpoints resolved, arc + arrowhead sampled
+interface FlowArc {
+  flow: Flow;
+  fromZone: FlowZone;
+  toZone: FlowZone;
+  positions: [number, number][][]; // [arc, arrowhead]
+}
 
 // The single controlled popup — content components mount only when open
 type OpenPopup =
@@ -43,7 +62,8 @@ type OpenPopup =
       isEndPoint: boolean;
       position: [number, number];
     }
-  | { kind: "cluster"; cluster: ClusterView; position: [number, number] };
+  | { kind: "zone"; zone: FlowZone; position: [number, number] }
+  | { kind: "flow"; arc: FlowArc; position: [number, number] };
 
 // Component to track map events and bounds
 const MapEventHandler: React.FC<MapEventHandlerProps> = ({
@@ -109,83 +129,112 @@ const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
           <strong>Passagers:</strong> {trip.passenger_seats}
         </p>
       )}
-      <p>
-        <strong>Coordonnées GPS:</strong>{" "}
-        {isEndPoint &&
-        trip.journey_end_lat !== undefined &&
-        trip.journey_end_lon !== undefined
-          ? `${trip.journey_end_lat.toFixed(3)}, ${trip.journey_end_lon.toFixed(3)}`
-          : `${trip.journey_start_lat.toFixed(3)}, ${trip.journey_start_lon.toFixed(3)}`}
-      </p>
     </div>
   );
 };
 
-// Popup content for a cluster — aggregates come from the supercluster index;
-// the operator-class breakdown is computed lazily, only when the popup opens
-const ClusterPopup: React.FC<{
-  cluster: ClusterView;
-  indexed: IndexedTrips | null;
-}> = ({ cluster, indexed }) => {
-  const map = useMap();
-
-  const avgDistance = cluster.count > 0 ? cluster.sumDistance / cluster.count : 0;
-
-  const topOperatorClass = useMemo(() => {
-    if (cluster.clusterId === null || !indexed) return null;
-    const counts: Record<string, number> = {};
-    for (const leaf of indexed.index.getLeaves(cluster.clusterId, 100)) {
-      const trip = indexed.trips[leaf.properties.tripIndex];
-      if (trip?.operator_class) {
-        counts[trip.operator_class] = (counts[trip.operator_class] || 0) + 1;
-      }
-    }
-    const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    return best ? best[0] : null;
-  }, [cluster.clusterId, indexed]);
-
-  const handleZoomClick = () => {
-    const targetZoom =
-      cluster.clusterId !== null && indexed
-        ? Math.min(
-            indexed.index.getClusterExpansionZoom(cluster.clusterId),
-            MIN_ZOOM_FOR_TRIPS
-          )
-        : MIN_ZOOM_FOR_TRIPS;
-    map.setView([cluster.lat, cluster.lon], targetZoom);
-  };
+// Popup content for a flow arc
+const FlowPopup: React.FC<{ arc: FlowArc }> = ({ arc }) => {
+  const { flow, fromZone, toZone } = arc;
+  const avgDistance = flow.sumDistance / flow.count;
 
   return (
     <div className="popup-content">
-      <h3 className="text-lg font-bold mb-2">Zone de covoiturage</h3>
+      <h3 className="text-base font-bold mb-1">
+        {fromZone.town ?? "Zone"} → {toZone.town ?? "Zone"}
+      </h3>
+      <p>
+        <strong>Trajets:</strong> {formatNumber(flow.count)}
+      </p>
+      {avgDistance > 0 && (
+        <p>
+          <strong>Distance moyenne:</strong> {formatDistance(avgDistance)}
+        </p>
+      )}
+    </div>
+  );
+};
+
+// Popup content for a zone: activity summary + top destinations + isolation
+const ZonePopup: React.FC<{
+  zone: FlowZone;
+  model: FlowModel | null;
+  isolated: boolean;
+  onToggleIsolate: () => void;
+  onClose: () => void;
+}> = ({ zone, model, isolated, onToggleIsolate, onClose }) => {
+  const map = useMap();
+
+  const topDestinations = useMemo(() => {
+    if (!model) return [];
+    // Merge by town name — adjacent grid cells can share the same town.
+    // (Plain object because `Map` is shadowed by this component's name.)
+    const byTown: Record<string, number> = {};
+    for (const flow of model.flows) {
+      if (flow.from !== zone.key) continue;
+      const town = model.zones.get(flow.to)?.town ?? "Zone voisine";
+      byTown[town] = (byTown[town] ?? 0) + flow.count;
+    }
+    return Object.entries(byTown)
+      .map(([town, count]) => ({ town, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [model, zone.key]);
+
+  return (
+    <div className="popup-content">
+      <h3 className="text-base font-bold mb-1">{zone.town ?? "Zone"}</h3>
       <div className="space-y-1">
         <p>
-          <strong>Nombre de trajets:</strong> {formatNumber(cluster.count)}
+          <strong>Départs:</strong> {formatNumber(zone.startCount)} ·{" "}
+          <strong>Arrivées:</strong> {formatNumber(zone.endCount)}
         </p>
-        {avgDistance > 0 && (
+        {zone.intraCount > 0 && (
           <p>
-            <strong>Distance moyenne:</strong> {formatDistance(avgDistance)}
+            <strong>Trajets internes:</strong> {formatNumber(zone.intraCount)}
           </p>
         )}
-        {topOperatorClass && (
-          <p>
-            <strong>Classe d'opérateur principale:</strong> {topOperatorClass}
-          </p>
+        {topDestinations.length > 0 && (
+          <div>
+            <strong>Top destinations:</strong>
+            <ul className="list-disc ml-4">
+              {topDestinations.map((d, i) => (
+                <li key={i}>
+                  {d.town} ({formatNumber(d.count)})
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
-        <button
-          onClick={handleZoomClick}
-          className="mt-2 bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
-        >
-          Zoomer pour voir les trajets
-        </button>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={onToggleIsolate}
+            className={`${
+              isolated ? "bg-gray-500 hover:bg-gray-700" : "bg-pink-600 hover:bg-pink-700"
+            } text-white py-1 px-2 rounded text-xs`}
+          >
+            {isolated ? "Tout afficher" : "Isoler ses flux"}
+          </button>
+          <button
+            onClick={() => {
+              onClose();
+              map.setView([zone.lat, zone.lon], map.getZoom() + 2);
+            }}
+            className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
+          >
+            Zoomer
+          </button>
+        </div>
       </div>
     </div>
   );
 };
 
 interface MapContentProps {
+  zones: FlowZone[];
+  arcs: FlowArc[];
+  isolatedZoneKey: string | null;
   visibleTrips: Trip[];
-  visibleClusters: ClusterView[];
   showIndividualTrips: boolean;
   selectedTrip: Trip | null;
   onTripClick: (trip: Trip) => void;
@@ -195,8 +244,10 @@ interface MapContentProps {
 // Memoized map content component — markers carry no mounted popups
 const MapContent: React.FC<MapContentProps> = React.memo(
   ({
+    zones,
+    arcs,
+    isolatedZoneKey,
     visibleTrips,
-    visibleClusters,
     showIndividualTrips,
     selectedTrip,
     onTripClick,
@@ -204,39 +255,73 @@ const MapContent: React.FC<MapContentProps> = React.memo(
   }) => {
     return (
       <>
-        {/* Trip clusters when zoomed out */}
+        {/* Flow arcs (zoomed out) */}
         {!showIndividualTrips &&
-          visibleClusters.map((cluster) => {
-            // Size based on number of trips in cluster (with a minimum)
-            const radius = Math.max(
-              5,
-              Math.min(20, Math.log(cluster.count) * 3)
+          arcs.map((arc) => {
+            const { flow } = arc;
+            const outgoing = flow.from === isolatedZoneKey;
+            const incoming = flow.to === isolatedZoneKey;
+            const dimmed =
+              isolatedZoneKey !== null && !outgoing && !incoming;
+
+            const weight = 1 + Math.min(6, Math.log2(flow.count));
+            const options: PathOptions = {
+              color: incoming ? FLOW_IN_COLOR : FLOW_COLOR,
+              weight: dimmed ? 1 : weight,
+              opacity: dimmed
+                ? 0.06
+                : isolatedZoneKey
+                  ? 0.85
+                  : flow.count === 1
+                    ? 0.3
+                    : 0.55,
+            };
+
+            return (
+              <Polyline
+                key={flow.key}
+                positions={arc.positions}
+                pathOptions={options}
+                eventHandlers={{
+                  click: () => {
+                    const mid =
+                      arc.positions[0][Math.floor(arc.positions[0].length / 2)];
+                    onOpenPopup({ kind: "flow", arc, position: mid });
+                  },
+                }}
+              />
             );
+          })}
 
-            // Color from blue to red based on count
-            const intensity = Math.min(255, Math.log(cluster.count) * 20);
-            const clusterColor = `rgb(${intensity}, 0, ${255 - intensity})`;
+        {/* Zone bubbles (zoomed out) */}
+        {!showIndividualTrips &&
+          zones.map((zone) => {
+            const activity = zone.startCount + zone.endCount;
+            const radius = Math.max(5, Math.min(20, Math.log(activity) * 2.6));
+            const intensity = Math.min(255, Math.log(activity) * 18);
+            const dimmed =
+              isolatedZoneKey !== null && zone.key !== isolatedZoneKey;
 
-            const clusterOptions: PathOptions = {
-              fillColor: clusterColor,
+            const options: PathOptions = {
+              fillColor: `rgb(${intensity}, 0, ${255 - intensity})`,
               color: "#fff",
               weight: 1,
-              opacity: 0.8,
-              fillOpacity: 0.6,
+              opacity: dimmed ? 0.15 : 0.9,
+              fillOpacity: dimmed ? 0.12 : 0.75,
             };
 
             return (
               <CircleMarker
-                key={cluster.key}
-                center={[cluster.lat, cluster.lon]}
+                key={zone.key}
+                center={[zone.lat, zone.lon]}
                 radius={radius}
-                pathOptions={clusterOptions}
+                pathOptions={options}
                 eventHandlers={{
                   click: () => {
                     onOpenPopup({
-                      kind: "cluster",
-                      cluster,
-                      position: [cluster.lat, cluster.lon],
+                      kind: "zone",
+                      zone,
+                      position: [zone.lat, zone.lon],
                     });
                   },
                 }}
@@ -244,7 +329,7 @@ const MapContent: React.FC<MapContentProps> = React.memo(
             );
           })}
 
-        {/* Individual trips when zoomed in */}
+        {/* Individual trips (street-level zoom) */}
         {showIndividualTrips &&
           visibleTrips.map((trip) => {
             const isSelected =
@@ -356,6 +441,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
   const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
+  const [isolatedZoneKey, setIsolatedZoneKey] = useState<string | null>(null);
 
   const indexed = useTripIndex(tripData);
 
@@ -369,16 +455,84 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
 
   const showIndividualTrips = currentZoom >= MIN_ZOOM_FOR_TRIPS;
 
-  // One spatial-index query per view change — no full-array scans.
-  // Trips resolve against the index's own snapshot (indexed.trips), which can
-  // lag behind tripData while a throttled rebuild is pending.
-  const { visibleTrips, visibleClusters, totalTripsInView } = useMemo(() => {
-    if (!indexed || !currentBounds) {
+  // Close popups that belong to the other view mode when crossing the
+  // flow/individual-trips threshold
+  useEffect(() => {
+    setOpenPopup((current) => {
+      if (!current) return current;
+      const isTripPopup = current.kind === "trip";
+      return isTripPopup === showIndividualTrips ? current : null;
+    });
+  }, [showIndividualTrips]);
+
+  // Flow model: recomputed only when the data or the zoom bucket changes —
+  // panning just filters it
+  const zoomBucket = Math.min(
+    MIN_ZOOM_FOR_TRIPS - 1,
+    Math.max(4, Math.round(currentZoom))
+  );
+  const flowModel = useMemo(() => {
+    if (tripData.length === 0 || showIndividualTrips) return null;
+    return buildFlowModel(tripData, cellSizeForZoom(zoomBucket));
+  }, [tripData, zoomBucket, showIndividualTrips]);
+
+  // Visible zones + top flows for the current view
+  const { visibleZones, visibleArcs, flowTripsInView } = useMemo(() => {
+    if (!flowModel || !currentBounds) {
       return {
-        visibleTrips: [] as Trip[],
-        visibleClusters: [] as ClusterView[],
-        totalTripsInView: 0,
+        visibleZones: [] as FlowZone[],
+        visibleArcs: [] as FlowArc[],
+        flowTripsInView: 0,
       };
+    }
+
+    // Pad the view so flows to just-off-screen zones stay visible
+    const bounds = currentBounds.pad(0.5);
+    const inView = (zone: FlowZone) => bounds.contains([zone.lat, zone.lon]);
+
+    const visibleZones: FlowZone[] = [];
+    let flowTripsInView = 0;
+    for (const zone of flowModel.zones.values()) {
+      if (inView(zone)) {
+        visibleZones.push(zone);
+        flowTripsInView += zone.startCount;
+      }
+    }
+
+    const visibleArcs: FlowArc[] = [];
+    for (const flow of flowModel.flows) {
+      if (visibleArcs.length >= MAX_VISIBLE_FLOWS) break;
+      const fromZone = flowModel.zones.get(flow.from);
+      const toZone = flowModel.zones.get(flow.to);
+      if (!fromZone || !toZone) continue;
+      if (!inView(fromZone) && !inView(toZone)) continue;
+      if (
+        isolatedZoneKey !== null &&
+        flow.from !== isolatedZoneKey &&
+        flow.to !== isolatedZoneKey
+      ) {
+        continue; // isolation: skip unrelated flows entirely
+      }
+      const arc = arcPoints(
+        [fromZone.lat, fromZone.lon],
+        [toZone.lat, toZone.lon]
+      );
+      visibleArcs.push({
+        flow,
+        fromZone,
+        toZone,
+        positions: [arc, arrowPoints(arc)],
+      });
+    }
+
+    return { visibleZones, visibleArcs, flowTripsInView };
+  }, [flowModel, currentBounds, isolatedZoneKey]);
+
+  // Individual trips: queried from BOTH endpoints, so a line stays visible
+  // while either end is on screen
+  const { visibleTrips, totalTripsInView } = useMemo(() => {
+    if (!showIndividualTrips || !indexed || !currentBounds) {
+      return { visibleTrips: [] as Trip[], totalTripsInView: 0 };
     }
     const { index, trips: indexedTrips } = indexed;
 
@@ -390,68 +544,41 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
     ];
     const features = index.getClusters(bbox, Math.round(currentZoom));
 
-    if (currentZoom >= MIN_ZOOM_FOR_TRIPS) {
-      // Above the cluster maxZoom every feature is an individual point
-      const trips: Trip[] = [];
-      for (const feature of features) {
-        if (!isClusterFeature(feature)) {
-          const trip = indexedTrips[feature.properties.tripIndex];
-          if (trip) trips.push(trip);
-        }
-      }
-      return {
-        visibleTrips: trips.slice(0, MAX_VISIBLE_TRIPS),
-        visibleClusters: [] as ClusterView[],
-        totalTripsInView: trips.length,
-      };
-    }
-
-    const clusters: ClusterView[] = [];
+    const seen = new Set<number>();
+    const trips: Trip[] = [];
     for (const feature of features) {
-      const [lon, lat] = feature.geometry.coordinates;
-      if (isClusterFeature(feature)) {
-        clusters.push({
-          key: `c${feature.id}`,
-          clusterId: feature.id as number,
-          lat,
-          lon,
-          count: feature.properties.point_count,
-          sumDistance: feature.properties.sumDistance,
-        });
-        continue;
-      }
-      const trip = indexedTrips[feature.properties.tripIndex];
-      if (!trip) continue;
-      clusters.push({
-        key: `p${feature.properties.tripIndex}`,
-        clusterId: null,
-        lat,
-        lon,
-        count: 1,
-        sumDistance: trip.journey_distance,
-      });
+      if (isClusterFeature(feature)) continue;
+      const i = feature.properties.tripIndex;
+      if (seen.has(i)) continue;
+      seen.add(i);
+      const trip = indexedTrips[i];
+      if (trip) trips.push(trip);
     }
-
     return {
-      visibleTrips: [] as Trip[],
-      visibleClusters: clusters,
-      totalTripsInView: clusters.reduce((sum, c) => sum + c.count, 0),
+      visibleTrips: trips.slice(0, MAX_VISIBLE_TRIPS),
+      totalTripsInView: trips.length,
     };
-  }, [indexed, currentBounds, currentZoom]);
+  }, [showIndividualTrips, indexed, currentBounds, currentZoom]);
 
   // Update parent component with stats about the current map view
   useEffect(() => {
     onStatsChange({
       zoom: currentZoom,
+      zoneCount: visibleZones.length,
+      flowCount: visibleArcs.length,
       tripCount: visibleTrips.length,
-      clusterCount: visibleClusters.length,
-      totalTripsInView,
+      totalTripsInView: showIndividualTrips
+        ? totalTripsInView
+        : flowTripsInView,
     });
   }, [
     currentZoom,
+    visibleZones.length,
+    visibleArcs.length,
     visibleTrips.length,
-    visibleClusters.length,
     totalTripsInView,
+    flowTripsInView,
+    showIndividualTrips,
     onStatsChange,
   ]);
 
@@ -471,6 +598,10 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
     setOpenPopup(popup);
   }, []);
 
+  const toggleIsolation = useCallback((zoneKey: string) => {
+    setIsolatedZoneKey((current) => (current === zoneKey ? null : zoneKey));
+  }, []);
+
   return (
     <div className="map-wrapper relative w-full h-screen">
       {/* Non-blocking streaming progress pill — the map stays interactive */}
@@ -480,6 +611,20 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
           {progress.rows === 0
             ? "Chargement des données…"
             : `${formatNumber(progress.rows)} trajets chargés…`}
+        </div>
+      )}
+
+      {/* Isolation banner */}
+      {isolatedZoneKey !== null && !showIndividualTrips && (
+        <div className="absolute top-14 right-4 z-[1500] bg-pink-600 text-white rounded-full shadow-md px-4 py-1.5 text-sm font-medium flex items-center gap-2">
+          Flux d'une zone isolés
+          <button
+            onClick={() => setIsolatedZoneKey(null)}
+            className="font-bold hover:text-pink-200"
+            aria-label="Afficher tous les flux"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -532,8 +677,10 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         />
 
         <MapContent
+          zones={visibleZones}
+          arcs={visibleArcs}
+          isolatedZoneKey={isolatedZoneKey}
           visibleTrips={visibleTrips}
-          visibleClusters={visibleClusters}
           showIndividualTrips={showIndividualTrips}
           selectedTrip={selectedTrip}
           onTripClick={handleTripClick}
@@ -550,8 +697,16 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
                 trip={openPopup.trip}
                 isEndPoint={openPopup.isEndPoint}
               />
+            ) : openPopup.kind === "flow" ? (
+              <FlowPopup arc={openPopup.arc} />
             ) : (
-              <ClusterPopup cluster={openPopup.cluster} indexed={indexed} />
+              <ZonePopup
+                zone={openPopup.zone}
+                model={flowModel}
+                isolated={isolatedZoneKey === openPopup.zone.key}
+                onToggleIsolate={() => toggleIsolation(openPopup.zone.key)}
+                onClose={() => setOpenPopup(null)}
+              />
             )}
           </Popup>
         )}
@@ -566,7 +721,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
               (totalTripsInView > visibleTrips.length
                 ? ` / ${formatNumber(totalTripsInView)}`
                 : "")
-            : `Zones visibles: ${formatNumber(visibleClusters.length)}`}
+            : `Zones: ${formatNumber(visibleZones.length)} · Flux: ${formatNumber(visibleArcs.length)}`}
         </div>
       </div>
 

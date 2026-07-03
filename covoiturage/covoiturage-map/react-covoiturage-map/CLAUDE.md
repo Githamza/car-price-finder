@@ -17,8 +17,9 @@ Interactive map of French carpooling trips (covoiturage), built with React + Typ
 - `src/config.ts` — data.gouv.fr URLs, `MAX_TRIPS` (env `VITE_MAX_TRIPS`, default 100k), `MAX_VISIBLE_TRIPS` (1500), `MIN_ZOOM_FOR_TRIPS` (15)
 - `src/contexts/TripDataContext.tsx` — global state (trips, `progress {rows, done}`, stats, selected trip, toast messages) via `useTripData()`. Load flow: resource metadata → cache hit? hydrate : stream + write cache. `fetchTripData()` (refresh button) bypasses the cache.
 - `src/data/` — `streamTrips.ts` (streaming fetch/parse, aborts at cap), `parseTrips.ts` (row→Trip with the real RPC columns), `tripCache.ts` (idb batches + `isCacheValid`), `resourceMeta.ts`, `sampleTrips.ts` (fallback)
-- `src/hooks/useTripIndex.ts` — supercluster index over trip start points; throttled rebuilds during streaming; `isClusterFeature` type guard
-- `src/components/Map.tsx` — react-leaflet with canvas renderer (`preferCanvas`). Clusters below zoom 15, individual trips (start marker + polyline + end marker) at 15+, capped at `MAX_VISIBLE_TRIPS`. One controlled `<Popup>` at map level — markers mount no popups.
+- `src/map/flows.ts` — pure flow-map model: grid-binned zones (centroid, start/end/intra counts, dominant town) + aggregated zone-to-zone flows, arc/arrowhead geometry. Rebuilt per zoom bucket (O(n), memoized); panning only filters it.
+- `src/hooks/useTripIndex.ts` — supercluster index over BOTH endpoints of every trip (for the street-level view); throttled rebuilds during streaming; `isClusterFeature` type guard
+- `src/components/Map.tsx` — react-leaflet with canvas renderer (`preferCanvas`). Below zoom 15: **flow map** — zone bubbles + curved directional arcs (thickness = trip count, bow to the right of travel + mid-arrow), top `MAX_VISIBLE_FLOWS` arcs. Zone popup shows départs/arrivées/internes + top destinations and can ISOLATE its flows (outgoing blue, incoming pink, rest dimmed). At 15+: individual trips queried from both endpoints (lines survive panning), capped at `MAX_VISIBLE_TRIPS`. One controlled `<Popup>` at map level — markers mount no popups.
 - `src/utils/format.ts` — pure fr-FR formatters (kept out of the context)
 - `src/types/index.ts` — shared types (`Trip`, `ClusterView`, `LoadProgress`, `Stats`, …)
 
@@ -49,4 +50,5 @@ The CSV is stream-parsed progressively (fetch `ReadableStream` → `TextDecoder`
 - Trips arrive ordered by datetime, so the row cap keeps the first ~N trips of the month, not a spatial sample.
 - The IndexedDB cache holds ONE month (the last viewed); switching months re-streams. Cache meta stores the resource id + title.
 - `useTripIndex` returns `{index, trips}` as one snapshot — always resolve `tripIndex` properties against that snapshot, never against live `tripData`. The index rebuild is throttled, so during month switches the live array and the index disagree (resolving against tripData crashed the Map with undefined trips).
+- Inside `Map.tsx` the identifier `Map` is the component — use `Record<>` instead of `new Map()` there.
 - UI copy is in **French**; number/date formatting uses `fr-FR` locale (see `src/utils/format.ts`).

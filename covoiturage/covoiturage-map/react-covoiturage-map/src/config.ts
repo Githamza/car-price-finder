@@ -17,5 +17,8 @@ export const MAX_TRIPS = Number(import.meta.env.VITE_MAX_TRIPS ?? 100_000);
 // Hard cap on individually rendered trips in the current viewport
 export const MAX_VISIBLE_TRIPS = 1_500;
 
+// Hard cap on rendered flow arcs (top by trip count) to keep the map legible
+export const MAX_VISIBLE_FLOWS = 400;
+
 // Zoom level at or above which individual trips replace clusters
 export const MIN_ZOOM_FOR_TRIPS = 15;

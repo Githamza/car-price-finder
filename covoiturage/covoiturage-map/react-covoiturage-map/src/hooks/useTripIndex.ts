@@ -5,15 +5,10 @@ import { MIN_ZOOM_FOR_TRIPS } from "../config";
 
 export interface TripPointProps {
   tripIndex: number;
-  [key: string]: unknown;
+  isEnd: boolean;
 }
 
-export interface TripAggregates {
-  sumDistance: number;
-  [key: string]: unknown;
-}
-
-export type TripIndex = Supercluster<TripPointProps, TripAggregates>;
+export type TripIndex = Supercluster<TripPointProps, Supercluster.AnyProps>;
 
 /**
  * The index and the exact trips array it was built from. Consumers must
@@ -28,9 +23,9 @@ export interface IndexedTrips {
 
 export function isClusterFeature(
   feature:
-    | Supercluster.ClusterFeature<TripAggregates>
+    | Supercluster.ClusterFeature<Supercluster.AnyProps>
     | Supercluster.PointFeature<TripPointProps>
-): feature is Supercluster.ClusterFeature<TripAggregates> {
+): feature is Supercluster.ClusterFeature<Supercluster.AnyProps> {
   return (
     (feature.properties as Supercluster.ClusterProperties).cluster === true
   );
@@ -41,9 +36,11 @@ export function isClusterFeature(
 const REBUILD_INTERVAL_MS = 1500;
 
 /**
- * Maintains a supercluster spatial index over the trips' start points.
- * One index answers both "clusters in bbox at zoom Z" (low zoom) and
- * "individual trips in bbox" (zoom >= MIN_ZOOM_FOR_TRIPS).
+ * Spatial index over BOTH endpoints of every trip, used for the
+ * individual-trips view (zoom >= MIN_ZOOM_FOR_TRIPS): a trip is found — and
+ * its line stays rendered — as long as either its start or its end is in
+ * view. Query with getClusters(bbox, zoom>=15), which returns raw points,
+ * then dedupe by tripIndex.
  */
 export function useTripIndex(trips: Trip[]): IndexedTrips | null {
   const [indexed, setIndexed] = useState<IndexedTrips | null>(null);
@@ -59,26 +56,33 @@ export function useTripIndex(trips: Trip[]): IndexedTrips | null {
       lastBuildRef.current = performance.now();
       const sc: TripIndex = new Supercluster({
         radius: 60,
-        // Cluster only below the individual-trips zoom so queries at
-        // MIN_ZOOM_FOR_TRIPS and above return raw points
         maxZoom: MIN_ZOOM_FOR_TRIPS - 1,
-        map: (props): TripAggregates => ({
-          sumDistance: trips[props.tripIndex].journey_distance,
-        }),
-        reduce: (acc, props) => {
-          acc.sumDistance += props.sumDistance;
-        },
       });
-      sc.load(
-        trips.map((trip, i) => ({
-          type: "Feature" as const,
+      const points: Supercluster.PointFeature<TripPointProps>[] = [];
+      trips.forEach((trip, i) => {
+        points.push({
+          type: "Feature",
           geometry: {
-            type: "Point" as const,
+            type: "Point",
             coordinates: [trip.journey_start_lon, trip.journey_start_lat],
           },
-          properties: { tripIndex: i },
-        }))
-      );
+          properties: { tripIndex: i, isEnd: false },
+        });
+        if (
+          trip.journey_end_lat !== undefined &&
+          trip.journey_end_lon !== undefined
+        ) {
+          points.push({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [trip.journey_end_lon, trip.journey_end_lat],
+            },
+            properties: { tripIndex: i, isEnd: true },
+          });
+        }
+      });
+      sc.load(points);
       setIndexed({ index: sc, trips });
     };
 

@@ -27,13 +27,16 @@ const InfoPanel: React.FC<InfoPanelProps> = ({ mapStats }) => {
           <div className="text-xs">
             <p>Zoom: {mapStats.zoom?.toFixed(1) || "N/A"}</p>
             {mapStats.zoom < MIN_ZOOM_FOR_TRIPS ? (
-              <p>Zones affichées: {formatNumber(mapStats.clusterCount)}</p>
+              <p>
+                Zones: {formatNumber(mapStats.zoneCount)} · Flux:{" "}
+                {formatNumber(mapStats.flowCount)}
+              </p>
             ) : (
               <p>Trajets affichés: {formatNumber(mapStats.tripCount)}</p>
             )}
             <p className="text-gray-500 mt-1">
               {mapStats.zoom < MIN_ZOOM_FOR_TRIPS
-                ? "Zoomez pour voir les trajets individuels"
+                ? `${formatNumber(mapStats.totalTripsInView)} départs dans la vue — cliquez une zone ou un flux pour les détails`
                 : mapStats.totalTripsInView > mapStats.tripCount
                   ? `Affichage limité à ${formatNumber(
                       mapStats.tripCount

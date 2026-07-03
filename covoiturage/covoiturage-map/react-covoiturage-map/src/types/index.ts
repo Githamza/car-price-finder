@@ -15,21 +15,12 @@ export interface Trip {
   passenger_seats: number;
 }
 
-// A rendered cluster (or single unclustered point) from the spatial index
-export interface ClusterView {
-  key: string;
-  clusterId: number | null; // null for a single unclustered point
-  lat: number;
-  lon: number;
-  count: number;
-  sumDistance: number; // meters, aggregated over the cluster's trips
-}
-
 // Map stats structure
 export interface MapStats {
   zoom: number;
+  zoneCount: number;
+  flowCount: number;
   tripCount: number;
-  clusterCount: number;
   totalTripsInView: number;
 }
 
