@@ -1,90 +1,75 @@
 # Covoiturage Map React
 
-Application interactive permettant de visualiser les trajets de covoiturage en France, basée sur les données ouvertes du Registre de Preuve de Covoiturage.
+Application interactive permettant de visualiser les trajets de covoiturage en France, basée sur les données ouvertes du Registre de Preuve de Covoiturage (RPC).
 
 ## Fonctionnalités
 
-- Affichage des trajets de covoiturage sur une carte interactive
-- Visualisation des points de départ et d'arrivée
-- Statistiques sur le nombre de trajets et la distance totale
-- Traitement des données CSV depuis l'API
-- Interface adaptative pour mobile et desktop
-- Mode hors ligne (PWA)
+- Carte interactive des trajets de covoiturage (clusters en vue large, trajets individuels en zoom élevé)
+- **Chargement progressif en streaming** : le CSV mensuel (300-400 Mo) est parsé au fil du téléchargement et interrompu après `MAX_TRIPS` lignes — la carte est utilisable en quelques secondes
+- **Cache IndexedDB** : les visites suivantes chargent instantanément, sans réseau ; invalidation par checksum de la ressource data.gouv.fr
+- Index spatial [supercluster](https://github.com/mapbox/supercluster) : clustering et requêtes par zone instantanés, même avec 100 000+ trajets
+- Statistiques agrégées (nombre de trajets, distance totale, distance moyenne par zone)
+- Popups détaillés (villes de départ/arrivée, date, distance, classe d'opérateur)
 
-## Technologies utilisées
+## Technologies
 
-- React 18
-- React Leaflet (visualisation cartographique)
-- Tailwind CSS (UI)
-- Context API (gestion d'état)
-- PapaParse (traitement CSV)
-- Service Worker (fonctionnalités hors ligne)
+- React 19 + TypeScript (strict)
+- Vite 7 (build) + Vitest (tests)
+- React Leaflet 5 / Leaflet 1.9 (rendu canvas)
+- Tailwind CSS 4
+- PapaParse (parsing CSV en streaming)
+- idb (cache IndexedDB)
+- supercluster (index spatial)
 
-## Installation
-
-1. Cloner le repository
-2. Installer les dépendances :
+## Démarrage
 
 ```bash
-cd react-covoiturage-map
 npm install
+npm run dev        # serveur de développement (http://localhost:5173)
 ```
 
-3. Lancer l'application en mode développement :
+Autres commandes :
 
 ```bash
-npm start
+npm run build      # build de production dans build/
+npm run preview    # sert le build localement
+npm test           # tests vitest
+npm run tsc        # vérification TypeScript
 ```
 
-L'application sera accessible à l'adresse [http://localhost:3000](http://localhost:3000).
-
-## Build pour la production
-
-Pour générer une version optimisée pour la production :
-
-```bash
-npm run build
-```
-
-Les fichiers seront générés dans le dossier `build/`.
+Variable d'environnement optionnelle : `VITE_MAX_TRIPS` (défaut `100000`) — nombre maximal de lignes chargées depuis le CSV (~720 octets/ligne téléchargés).
 
 ## Structure du projet
 
 ```
 react-covoiturage-map/
-├── public/               # Fichiers statiques
-│   ├── index.html        # Point d'entrée HTML
-│   ├── manifest.json     # Configuration PWA
-│   └── service-worker.js # Service worker pour fonctionnalités offline
-├── src/                  # Code source
-│   ├── assets/           # Images et ressources
-│   ├── components/       # Composants React
-│   │   ├── Map.js        # Composant de carte Leaflet
-│   │   ├── InfoPanel.js  # Panneau d'information
-│   │   ├── MapLegend.js  # Légende de la carte
-│   │   └── MessageToast.js # Notifications
-│   ├── contexts/         # Contextes React
-│   │   └── TripDataContext.js # Gestion des données de trajets CSV
-│   ├── App.js            # Composant principal
-│   ├── index.js          # Point d'entrée JavaScript
-│   └── index.css         # Styles globaux avec Tailwind
-├── package.json          # Dépendances et scripts
-└── README.md             # Documentation
+├── index.html                  # Point d'entrée HTML (Vite)
+├── vite.config.ts
+├── src/
+│   ├── config.ts               # URLs data.gouv.fr, caps, seuils de zoom
+│   ├── data/
+│   │   ├── streamTrips.ts      # Streaming fetch + parse progressif du CSV
+│   │   ├── parseTrips.ts       # Mapping ligne CSV -> Trip (colonnes réelles RPC)
+│   │   ├── tripCache.ts        # Cache IndexedDB + logique d'invalidation
+│   │   ├── resourceMeta.ts     # Métadonnées de la ressource (checksum)
+│   │   └── sampleTrips.ts      # Données de secours
+│   ├── hooks/
+│   │   └── useTripIndex.ts     # Index spatial supercluster
+│   ├── contexts/
+│   │   └── TripDataContext.tsx # État global (trajets, progression, sélection)
+│   ├── components/
+│   │   ├── Map.tsx             # Carte Leaflet, clusters, popup contrôlé
+│   │   ├── InfoPanel.tsx
+│   │   ├── MapLegend.tsx
+│   │   └── MessageToast.tsx
+│   ├── utils/format.ts         # Formatage fr-FR (nombres, distances, dates)
+│   └── types/index.ts
+└── deno.json                   # Déploiement statique (Deno Deploy sert build/)
 ```
 
-## Gestion des données CSV
+## Données
 
-L'application récupère et analyse les données CSV à partir de l'API data.gouv.fr. Le traitement des données comprend :
-
-1. Récupération du fichier CSV depuis l'API
-2. Analyse du CSV avec PapaParse
-3. Mappage des colonnes CSV vers notre modèle de données
-4. Gestion des différents formats potentiels de noms de colonnes
-5. Filtrage des données invalides (coordonnées manquantes ou non numériques)
-
-## Sources de données
-
-Les données de trajets de covoiturage proviennent du Registre de Preuve de Covoiturage, disponibles sur [data.gouv.fr](https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/).
+Les trajets proviennent du [Registre de Preuve de Covoiturage sur data.gouv.fr](https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/) : un CSV par mois (délimité par `;`), ~500-600k trajets/mois. Le fichier est servi avec CORS ouvert, ce qui permet le streaming direct depuis le navigateur. Pour changer de mois, mettre à jour `RESOURCE_ID` dans `src/config.ts`.
 
 ## Licence
 

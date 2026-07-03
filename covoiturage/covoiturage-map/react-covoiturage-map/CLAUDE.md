@@ -12,12 +12,15 @@ Interactive map of French carpooling trips (covoiturage), built with React + Typ
 
 ## Architecture
 
-- `src/index.tsx` — entry; wraps `<App/>` in `<TripDataProvider>`
+- `src/index.tsx` — entry; StrictMode + `<TripDataProvider>`
 - `src/App.tsx` — composes `Map`, `InfoPanel`, `MessageToast`; map stats flow up from `Map` via callback
-- `src/contexts/TripDataContext.tsx` — global state (trips, loading progress, stats, selected trip, toast messages), consumed via the `useTripData()` hook
-- `src/components/Map.tsx` — Leaflet map (react-leaflet). Two render modes by zoom: clusters when zoomed out, individual trips (start marker + polyline + end marker) when zoomed in
-- `src/components/InfoPanel.tsx`, `MapLegend.tsx`, `MessageToast.tsx` — UI chrome
-- `src/types/index.ts` — shared types (`Trip`, `Cluster`, `Bounds`, `Stats`, …)
+- `src/config.ts` — data.gouv.fr URLs, `MAX_TRIPS` (env `VITE_MAX_TRIPS`, default 100k), `MAX_VISIBLE_TRIPS` (1500), `MIN_ZOOM_FOR_TRIPS` (15)
+- `src/contexts/TripDataContext.tsx` — global state (trips, `progress {rows, done}`, stats, selected trip, toast messages) via `useTripData()`. Load flow: resource metadata → cache hit? hydrate : stream + write cache. `fetchTripData()` (refresh button) bypasses the cache.
+- `src/data/` — `streamTrips.ts` (streaming fetch/parse, aborts at cap), `parseTrips.ts` (row→Trip with the real RPC columns), `tripCache.ts` (idb batches + `isCacheValid`), `resourceMeta.ts`, `sampleTrips.ts` (fallback)
+- `src/hooks/useTripIndex.ts` — supercluster index over trip start points; throttled rebuilds during streaming; `isClusterFeature` type guard
+- `src/components/Map.tsx` — react-leaflet with canvas renderer (`preferCanvas`). Clusters below zoom 15, individual trips (start marker + polyline + end marker) at 15+, capped at `MAX_VISIBLE_TRIPS`. One controlled `<Popup>` at map level — markers mount no popups.
+- `src/utils/format.ts` — pure fr-FR formatters (kept out of the context)
+- `src/types/index.ts` — shared types (`Trip`, `ClusterView`, `LoadProgress`, `Stats`, …)
 
 ## Data source (important)
 
@@ -39,4 +42,8 @@ The CSV is stream-parsed progressively (fetch `ReadableStream` → `TextDecoder`
 - `react-leaflet` 5 requires React 19.
 - The `build/` output directory name is load-bearing for `deno.json`.
 - Trip popups: keep the single controlled `<Popup>` pattern — do not mount a `<Popup>` per marker (thousands of subtrees).
+- `fadeAnimation` is disabled on the map: with StrictMode remounts, Leaflet's tile fade left tiles stuck at opacity 0.
+- Do **not** fitBounds over the data — the dataset includes overseas/foreign trips, so data bounds center the map over the Middle East. The France default view is intentional.
+- `www.data.gouv.fr` (redirect + metadata endpoints) 503s intermittently; the loader streams from the resource's direct `static.data.gouv.fr` URL when metadata is available and retries once. Keep failures non-fatal.
+- Trips arrive ordered by datetime, so the row cap keeps the first ~N trips of the month (early February), not a spatial sample.
 - UI copy is in **French**; number/date formatting uses `fr-FR` locale (see `src/utils/format.ts`).
