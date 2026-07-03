@@ -10,6 +10,8 @@ import {
 } from "react-leaflet";
 import { LatLngBounds, PathOptions } from "leaflet";
 import { useTripData } from "../contexts/TripDataContext";
+import { formatDate, formatDistance } from "../utils/format";
+import { getTripsInBounds, getTripClusters } from "../map/clustering";
 import {
   MapProps,
   MapUpdaterProps,
@@ -48,14 +50,12 @@ const MapUpdater: React.FC<MapUpdaterProps> = ({ bounds, onZoomChange }) => {
   const map = useMap();
 
   useEffect(() => {
-    console.log("MapUpdater useEffect bounds", bounds);
     if (bounds && bounds.length > 1) {
       map.fitBounds(bounds as [number, number][]);
     }
   }, [bounds, map]);
 
   useEffect(() => {
-    console.log("MapUpdater useEffect");
     // Track zoom level changes
     const handleZoomEnd = () => {
       onZoomChange(map.getZoom());
@@ -97,8 +97,6 @@ const MapEventHandler: React.FC<MapEventHandlerProps> = ({
 
 // Component to create a popup content
 const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
-  const { formatDate, formatDistance } = useTripData();
-
   return (
     <div className="popup-content">
       <h3>{isEndPoint ? "Destination" : "Départ"}</h3>
@@ -127,14 +125,14 @@ const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
           <strong>Origine:</strong> {trip.journey_start_town}
         </p>
       )}
-      {trip.operator && trip.operator !== "N/A" && (
+      {trip.operator_class && (
         <p>
-          <strong>Opérateur:</strong> {trip.operator}
+          <strong>Classe d'opérateur:</strong> {trip.operator_class}
         </p>
       )}
-      {trip.passenger_count && trip.passenger_count > 0 && (
+      {trip.passenger_seats > 0 && (
         <p>
-          <strong>Passagers:</strong> {trip.passenger_count}
+          <strong>Passagers:</strong> {trip.passenger_seats}
         </p>
       )}
       {/* Display GPS coordinates */}
@@ -159,7 +157,6 @@ const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
 
 // Component to create a cluster popup content
 const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
-  const { formatDistance } = useTripData();
   const map = useMap();
 
   // Calculate average distance for trips in this cluster
@@ -171,20 +168,20 @@ const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
         ) / cluster.trips.length
       : 0;
 
-  // Calculate most common operator
-  const operatorCounts: Record<string, number> = {};
+  // Calculate most common operator class (A/B/C)
+  const classCounts: Record<string, number> = {};
   cluster.trips.forEach((trip) => {
-    const operator = trip.operator || "N/A";
-    operatorCounts[operator] = (operatorCounts[operator] || 0) + 1;
+    const operatorClass = trip.operator_class || "N/A";
+    classCounts[operatorClass] = (classCounts[operatorClass] || 0) + 1;
   });
 
-  let topOperator = "N/A";
+  let topOperatorClass = "N/A";
   let maxCount = 0;
 
-  Object.entries(operatorCounts).forEach(([operator, count]) => {
+  Object.entries(classCounts).forEach(([operatorClass, count]) => {
     if (count > maxCount) {
       maxCount = count;
-      topOperator = operator;
+      topOperatorClass = operatorClass;
     }
   });
 
@@ -205,9 +202,9 @@ const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
             <strong>Distance moyenne:</strong> {formatDistance(avgDistance)}
           </p>
         )}
-        {topOperator !== "N/A" && (
+        {topOperatorClass !== "N/A" && (
           <p>
-            <strong>Opérateur principal:</strong> {topOperator}
+            <strong>Classe d'opérateur principale:</strong> {topOperatorClass}
           </p>
         )}
         <button
@@ -359,14 +356,8 @@ const MapContent: React.FC<MapContentProps> = React.memo(
 );
 
 const Map: React.FC<MapProps> = ({ onStatsChange }) => {
-  const {
-    tripData,
-    selectedTrip,
-    selectTrip,
-    clearSelectedTrip,
-    getTripsInBounds,
-    getTripClusters,
-  } = useTripData();
+  const { tripData, selectedTrip, selectTrip, clearSelectedTrip } =
+    useTripData();
 
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
@@ -425,28 +416,22 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       [currentBounds.getNorth(), currentBounds.getEast()],
     ];
 
-    try {
-      if (currentZoom >= MIN_ZOOM_FOR_TRIPS) {
-        const tripsInView = getTripsInBounds(boundsArray);
-        setVisibleTrips(tripsInView);
-        setVisibleClusters([]);
-      } else {
-        const zoomLevels = Object.keys(CLUSTER_GRID_SIZE_ZOOM).map(Number);
-        const nearestZoomLevel = zoomLevels.reduce((prev, curr) =>
-          Math.abs(curr - currentZoom) < Math.abs(prev - currentZoom)
-            ? curr
-            : prev
-        );
-        const gridSize = CLUSTER_GRID_SIZE_ZOOM[nearestZoomLevel] || 1;
+    if (currentZoom >= MIN_ZOOM_FOR_TRIPS) {
+      setVisibleTrips(getTripsInBounds(tripData, boundsArray));
+      setVisibleClusters([]);
+    } else {
+      const zoomLevels = Object.keys(CLUSTER_GRID_SIZE_ZOOM).map(Number);
+      const nearestZoomLevel = zoomLevels.reduce((prev, curr) =>
+        Math.abs(curr - currentZoom) < Math.abs(prev - currentZoom)
+          ? curr
+          : prev
+      );
+      const gridSize = CLUSTER_GRID_SIZE_ZOOM[nearestZoomLevel] || 1;
 
-        const clusters = getTripClusters(boundsArray, gridSize);
-        setVisibleClusters(clusters);
-        setVisibleTrips([]);
-      }
-    } catch (error) {
-      console.error("Error updating map data:", error);
+      setVisibleClusters(getTripClusters(tripData, boundsArray, gridSize));
+      setVisibleTrips([]);
     }
-  }, [currentBounds, currentZoom, getTripsInBounds, getTripClusters]);
+  }, [currentBounds, currentZoom, tripData]);
 
   // Update parent component with stats about the current map view
   useEffect(() => {

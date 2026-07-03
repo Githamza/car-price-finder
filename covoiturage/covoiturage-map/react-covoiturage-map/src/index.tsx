@@ -9,10 +9,9 @@ const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
 root.render(
-  // Remove StrictMode temporarily to diagnose rerendering issues
-  // <React.StrictMode>
-  <TripDataProvider>
-    <App />
-  </TripDataProvider>
-  // </React.StrictMode>
+  <React.StrictMode>
+    <TripDataProvider>
+      <App />
+    </TripDataProvider>
+  </React.StrictMode>
 );

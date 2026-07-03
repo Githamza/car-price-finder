@@ -2,18 +2,11 @@ import React from "react";
 import { useTripData } from "../contexts/TripDataContext";
 import MapLegend from "./MapLegend";
 import { InfoPanelProps } from "../types";
+import { formatNumber, formatDistance, formatDate } from "../utils/format";
 
 const InfoPanel: React.FC<InfoPanelProps> = ({ mapStats }) => {
-  const {
-    isLoading,
-    stats,
-    fetchTripData,
-    formatNumber,
-    formatDistance,
-    formatDate,
-    selectedTrip,
-    clearSelectedTrip,
-  } = useTripData();
+  const { isLoading, stats, fetchTripData, selectedTrip, clearSelectedTrip } =
+    useTripData();
 
   const handleRefresh = (): void => {
     fetchTripData();
@@ -73,17 +66,17 @@ const InfoPanel: React.FC<InfoPanelProps> = ({ mapStats }) => {
               <strong>Distance:</strong>{" "}
               {formatDistance(selectedTrip.journey_distance)}
             </p>
-            {selectedTrip.operator && selectedTrip.operator !== "N/A" && (
+            {selectedTrip.operator_class && (
               <p>
-                <strong>Opérateur:</strong> {selectedTrip.operator}
+                <strong>Classe d'opérateur:</strong>{" "}
+                {selectedTrip.operator_class}
               </p>
             )}
-            {selectedTrip.passenger_count &&
-              selectedTrip.passenger_count > 0 && (
-                <p>
-                  <strong>Passagers:</strong> {selectedTrip.passenger_count}
-                </p>
-              )}
+            {selectedTrip.passenger_seats > 0 && (
+              <p>
+                <strong>Passagers:</strong> {selectedTrip.passenger_seats}
+              </p>
+            )}
           </div>
         </div>
       )}

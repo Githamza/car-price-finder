@@ -1,18 +1,18 @@
 import { LatLngBounds } from "leaflet";
 
-// Trip data structure
+// Trip data structure (mapped from the RPC CSV — see src/data/parseTrips.ts)
 export interface Trip {
   journey_id: string;
-  datetime: string;
+  datetime: string; // journey_start_datetime in the CSV
   journey_start_lat: number;
   journey_start_lon: number;
   journey_start_town?: string;
   journey_end_lat?: number;
   journey_end_lon?: number;
   journey_end_town?: string;
-  journey_distance: number;
-  operator: string;
-  passenger_count: number;
+  journey_distance: number; // meters
+  operator_class?: string; // A/B/C — the dataset has no operator name column
+  passenger_seats: number;
 }
 
 // Cluster data structure
@@ -59,11 +59,6 @@ export interface TripDataContextType {
   selectTrip: (trip: Trip) => void;
   clearSelectedTrip: () => void;
   fetchTripData: () => Promise<void>;
-  formatNumber: (number: number) => string;
-  formatDistance: (meters: number) => string;
-  formatDate: (dateString: string) => string;
-  getTripsInBounds: (bounds: Bounds) => Trip[];
-  getTripClusters: (bounds: Bounds, gridSize?: number) => Cluster[];
 }
 
 // Props types for components
