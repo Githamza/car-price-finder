@@ -49,10 +49,17 @@ export interface Stats {
   totalDistance: number;
 }
 
+// Streaming load progress
+export interface LoadProgress {
+  rows: number;
+  done: boolean;
+}
+
 // Context type for TripDataContext
 export interface TripDataContextType {
   tripData: Trip[];
   isLoading: boolean;
+  progress: LoadProgress;
   message: Message | null;
   stats: Stats;
   selectedTrip: Trip | null;
@@ -68,11 +75,6 @@ export interface MapProps {
 
 export interface InfoPanelProps {
   mapStats: MapStats | null;
-}
-
-export interface MapUpdaterProps {
-  bounds: number[][];
-  onZoomChange: (zoom: number) => void;
 }
 
 export interface MapEventHandlerProps {

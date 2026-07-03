@@ -6,8 +6,9 @@ export const CSV_URL = `https://www.data.gouv.fr/fr/datasets/r/${RESOURCE_ID}`;
 // CORS-open metadata endpoint (checksum, last_modified) used for cache invalidation
 export const RESOURCE_META_URL = `https://www.data.gouv.fr/api/2/datasets/resources/${RESOURCE_ID}/`;
 
-// Row cap for the streamed CSV — the fetch is aborted once reached
-export const MAX_TRIPS = Number(import.meta.env.VITE_MAX_TRIPS ?? 200_000);
+// Row cap for the streamed CSV — the fetch is aborted once reached.
+// ~720 bytes/row, so 100k rows ≈ 70 MB downloaded.
+export const MAX_TRIPS = Number(import.meta.env.VITE_MAX_TRIPS ?? 100_000);
 
 // Hard cap on individually rendered trips in the current viewport
 export const MAX_VISIBLE_TRIPS = 1_500;

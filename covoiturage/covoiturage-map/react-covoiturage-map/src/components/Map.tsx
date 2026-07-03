@@ -10,11 +10,10 @@ import {
 } from "react-leaflet";
 import { LatLngBounds, PathOptions } from "leaflet";
 import { useTripData } from "../contexts/TripDataContext";
-import { formatDate, formatDistance } from "../utils/format";
+import { formatDate, formatDistance, formatNumber } from "../utils/format";
 import { getTripsInBounds, getTripClusters } from "../map/clustering";
 import {
   MapProps,
-  MapUpdaterProps,
   MapEventHandlerProps,
   TripPopupProps,
   ClusterPopupProps,
@@ -45,35 +44,6 @@ const CLUSTER_GRID_SIZE_ZOOM: Record<number, number> = {
 };
 const MIN_ZOOM_FOR_TRIPS = 15; // Show individual trips only at zoom level 10+
 
-// Helper component to update map view when bounds change and track zoom level
-const MapUpdater: React.FC<MapUpdaterProps> = ({ bounds, onZoomChange }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (bounds && bounds.length > 1) {
-      map.fitBounds(bounds as [number, number][]);
-    }
-  }, [bounds, map]);
-
-  useEffect(() => {
-    // Track zoom level changes
-    const handleZoomEnd = () => {
-      onZoomChange(map.getZoom());
-    };
-
-    map.on("zoomend", handleZoomEnd);
-
-    // Initialize with current zoom
-    onZoomChange(map.getZoom());
-
-    return () => {
-      map.off("zoomend", handleZoomEnd);
-    };
-  }, [map, onZoomChange]);
-
-  return null;
-};
-
 // Component to track map events and bounds
 const MapEventHandler: React.FC<MapEventHandlerProps> = ({
   onBoundsChange,
@@ -86,11 +56,14 @@ const MapEventHandler: React.FC<MapEventHandlerProps> = ({
     zoomend: () => {
       onZoomChange(map.getZoom());
     },
-    load: () => {
-      onBoundsChange(map.getBounds());
-      onZoomChange(map.getZoom());
-    },
   });
+
+  // Initialize bounds/zoom on mount — Leaflet's "load" event has already
+  // fired by the time this handler is attached
+  useEffect(() => {
+    onBoundsChange(map.getBounds());
+    onZoomChange(map.getZoom());
+  }, [map, onBoundsChange, onZoomChange]);
 
   return null;
 };
@@ -356,46 +329,13 @@ const MapContent: React.FC<MapContentProps> = React.memo(
 );
 
 const Map: React.FC<MapProps> = ({ onStatsChange }) => {
-  const { tripData, selectedTrip, selectTrip, clearSelectedTrip } =
+  const { tripData, progress, selectedTrip, selectTrip, clearSelectedTrip } =
     useTripData();
 
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
   const [visibleTrips, setVisibleTrips] = useState<Trip[]>([]);
   const [visibleClusters, setVisibleClusters] = useState<Cluster[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // Calculate bounds for initial map view
-  const initialBounds = useMemo(() => {
-    if (!tripData || !Array.isArray(tripData) || tripData.length === 0)
-      return null;
-
-    const points: [number, number][] = [];
-    // Only use a sample of trips for initial bounds to improve performance
-    const sampleData = tripData.slice(0, 1000);
-
-    sampleData.forEach((trip) => {
-      if (trip.journey_start_lat && trip.journey_start_lon) {
-        points.push([trip.journey_start_lat, trip.journey_start_lon]);
-      }
-      if (trip.journey_end_lat && trip.journey_end_lon) {
-        points.push([trip.journey_end_lat, trip.journey_end_lon]);
-      }
-    });
-
-    return points.length > 0 ? points : null;
-  }, [tripData]);
-
-  // Handle loading state
-  useEffect(() => {
-    if (tripData && tripData.length > 0 && initialBounds) {
-      // Set a slight delay to allow map to render
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [tripData, initialBounds]);
 
   // Handle zoom level change
   const handleZoomChange = useCallback((zoom: number) => {
@@ -467,12 +407,13 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
 
   return (
     <div className="map-wrapper relative w-full h-screen">
-      {isLoading && (
-        <div className="absolute inset-0 bg-slate-800/70 z-[2000] flex flex-col items-center justify-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-white text-xl font-semibold">
-            Chargement des données...
-          </p>
+      {/* Non-blocking streaming progress pill — the map stays interactive */}
+      {!progress.done && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[1500] bg-white/90 rounded-full shadow-md px-4 py-1.5 text-sm font-medium text-gray-700 flex items-center gap-2">
+          <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+          {progress.rows === 0
+            ? "Chargement des données…"
+            : `${formatNumber(progress.rows)} trajets chargés…`}
         </div>
       )}
 
@@ -493,6 +434,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
         scrollWheelZoom={true}
+        fadeAnimation={false}
         className="absolute inset-0"
       >
         <TileLayer
@@ -500,9 +442,6 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {initialBounds && (
-          <MapUpdater bounds={initialBounds} onZoomChange={handleZoomChange} />
-        )}
         <MapEventHandler
           onBoundsChange={handleBoundsChange}
           onZoomChange={handleZoomChange}
