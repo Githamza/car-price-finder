@@ -69,7 +69,7 @@ react-covoiturage-map/
 
 ## Données
 
-Les trajets proviennent du [Registre de Preuve de Covoiturage sur data.gouv.fr](https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/) : un CSV par mois (délimité par `;`), ~500-600k trajets/mois. Le fichier est servi avec CORS ouvert, ce qui permet le streaming direct depuis le navigateur. Pour changer de mois, mettre à jour `RESOURCE_ID` dans `src/config.ts`.
+Les trajets proviennent du [Registre de Preuve de Covoiturage sur data.gouv.fr](https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/) : un CSV par mois (délimité par `;`), ~500-600k trajets/mois. Le fichier est servi avec CORS ouvert, ce qui permet le streaming direct depuis le navigateur. Le dernier mois disponible est détecté automatiquement via l'API du jeu de données, et un sélecteur dans le bandeau permet de naviguer entre les mois.
 
 ## Licence
 

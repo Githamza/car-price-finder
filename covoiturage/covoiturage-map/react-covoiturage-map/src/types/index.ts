@@ -51,6 +51,14 @@ export interface LoadProgress {
   done: boolean;
 }
 
+// One monthly CSV file of the RPC dataset
+export interface MonthResource {
+  id: string;
+  title: string; // e.g. "2026-05.csv"
+  url: string; // direct static.data.gouv.fr URL
+  checksum: string | null;
+}
+
 // Context type for TripDataContext
 export interface TripDataContextType {
   tripData: Trip[];
@@ -59,8 +67,14 @@ export interface TripDataContextType {
   message: Message | null;
   stats: Stats;
   selectedTrip: Trip | null;
+  /** Title of the monthly source file currently displayed, e.g. "2026-05.csv" */
+  dataTitle: string | null;
+  /** All available monthly files, newest first */
+  availableMonths: MonthResource[];
   selectTrip: (trip: Trip) => void;
   clearSelectedTrip: () => void;
+  /** Load a specific month by resource title */
+  selectMonth: (title: string) => Promise<void>;
   fetchTripData: () => Promise<void>;
 }
 

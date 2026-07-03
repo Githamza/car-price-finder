@@ -13,12 +13,18 @@ import {
   Trip,
   TripDataContextType,
   Message,
+  MonthResource,
   Stats,
   LoadProgress,
 } from "../types";
-import { CSV_URL, MAX_TRIPS, RESOURCE_ID } from "../config";
+import {
+  FALLBACK_CSV_URL,
+  FALLBACK_RESOURCE_ID,
+  FALLBACK_RESOURCE_TITLE,
+  MAX_TRIPS,
+} from "../config";
 import { streamTrips } from "../data/streamTrips";
-import { fetchResourceMeta } from "../data/resourceMeta";
+import { fetchMonthlyResources } from "../data/resourceMeta";
 import {
   isCacheValid,
   readCachedTrips,
@@ -59,8 +65,13 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
     totalDistance: 0,
   });
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  // Title of the monthly file the data comes from, e.g. "2026-05.csv"
+  const [dataTitle, setDataTitle] = useState<string | null>(null);
+  const [availableMonths, setAvailableMonths] = useState<MonthResource[]>([]);
 
   const controllerRef = useRef<AbortController | null>(null);
+  // Month currently displayed — read by refresh without retriggering loads
+  const dataTitleRef = useRef<string | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectTrip = useCallback((trip: Trip): void => {
@@ -92,21 +103,31 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
   }, []);
 
   const load = useCallback(
-    async (signal: AbortSignal, forceRefresh: boolean): Promise<void> => {
+    async (
+      signal: AbortSignal,
+      forceRefresh: boolean,
+      requestedTitle: string | null = null
+    ): Promise<void> => {
       setIsLoading(true);
       setProgress({ rows: 0, done: false });
       clearSelectedTrip();
 
       try {
-        const remote = await fetchResourceMeta(signal);
+        // Discover the available monthly files via the dataset API
+        const months = await fetchMonthlyResources(signal);
+        if (months.length > 0) setAvailableMonths(months);
+
+        // Requested month if any, otherwise the latest available
+        const remote = requestedTitle
+          ? (months.find((m) => m.title === requestedTitle) ?? null)
+          : (months[0] ?? null);
 
         if (!forceRefresh) {
           const cached = await readCachedTrips();
-          if (
-            cached &&
-            isCacheValid(cached.meta, remote, RESOURCE_ID, MAX_TRIPS, Date.now())
-          ) {
+          if (cached && isCacheValid(cached.meta, remote, MAX_TRIPS, Date.now())) {
             applyTrips(cached.trips);
+            setDataTitle(cached.meta.title);
+            dataTitleRef.current = cached.meta.title;
             setProgress({ rows: cached.trips.length, done: true });
             showMessage(
               "success",
@@ -116,11 +137,15 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
           }
         }
 
+        const title = remote?.title ?? FALLBACK_RESOURCE_TITLE;
+        setDataTitle(title);
+        dataTitleRef.current = title;
+
         const buffer: Trip[] = [];
         let lastFlush = 0;
 
         const streamOnce = () =>
-          streamTrips(remote?.url ?? CSV_URL, {
+          streamTrips(remote?.url ?? FALLBACK_CSV_URL, {
             maxRows: MAX_TRIPS,
             signal,
             onBatch: (trips, totalSoFar) => {
@@ -153,7 +178,8 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
         showMessage("success", `${formatNumber(total)} trajets chargés`);
 
         await writeCachedTrips(buffer, {
-          resourceId: RESOURCE_ID,
+          resourceId: remote?.id ?? FALLBACK_RESOURCE_ID,
+          title: remote?.title ?? FALLBACK_RESOURCE_TITLE,
           checksum: remote?.checksum ?? null,
           rowCap: MAX_TRIPS,
           tripCount: total,
@@ -176,13 +202,25 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
     [applyTrips, clearSelectedTrip, showMessage]
   );
 
-  // Exposed refresh: bypasses the cache and re-streams from the network
+  // Exposed refresh: bypasses the cache and re-streams the current month
   const fetchTripData = useCallback(async (): Promise<void> => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    await load(controller.signal, true);
+    await load(controller.signal, true, dataTitleRef.current);
   }, [load]);
+
+  // Load a specific month (uses the cache when it already holds that month)
+  const selectMonth = useCallback(
+    async (title: string): Promise<void> => {
+      if (title === dataTitleRef.current) return;
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      await load(controller.signal, false, title);
+    },
+    [load]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -199,8 +237,11 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
       message,
       stats,
       selectedTrip,
+      dataTitle,
+      availableMonths,
       selectTrip,
       clearSelectedTrip,
+      selectMonth,
       fetchTripData,
     }),
     [
@@ -210,8 +251,11 @@ export const TripDataProvider: FC<TripDataProviderProps> = ({ children }) => {
       message,
       stats,
       selectedTrip,
+      dataTitle,
+      availableMonths,
       selectTrip,
       clearSelectedTrip,
+      selectMonth,
       fetchTripData,
     ]
   );

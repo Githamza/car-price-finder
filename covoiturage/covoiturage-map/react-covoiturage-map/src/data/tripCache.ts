@@ -1,19 +1,13 @@
 import { openDB, DBSchema } from "idb";
-import { Trip } from "../types";
+import { MonthResource, Trip } from "../types";
 
 export interface TripCacheMeta {
   resourceId: string;
+  title: string; // e.g. "2026-05.csv" — used for the data-month banner
   checksum: string | null;
   rowCap: number;
   tripCount: number;
   storedAt: number; // epoch ms
-}
-
-export interface RemoteResourceMeta {
-  checksum: string | null;
-  lastModified: string | null;
-  /** Direct static.data.gouv.fr URL — avoids the 503-prone redirect host */
-  url: string | null;
 }
 
 interface TripCacheSchema extends DBSchema {
@@ -41,20 +35,22 @@ function getDb() {
  */
 export function isCacheValid(
   meta: TripCacheMeta,
-  remote: RemoteResourceMeta | null,
-  resourceId: string,
+  remote: MonthResource | null,
   maxTrips: number,
   now: number
 ): boolean {
-  if (meta.resourceId !== resourceId) return false;
-
   // The cache was truncated at a cap lower than what we now want, and the
   // file actually had more rows — refetch to honour the bigger cap.
   if (meta.rowCap < maxTrips && meta.tripCount >= meta.rowCap) return false;
 
-  if (remote?.checksum) return meta.checksum === remote.checksum;
+  if (remote) {
+    // A newer monthly file (or a republished one) invalidates the cache
+    if (meta.resourceId !== remote.id) return false;
+    if (remote.checksum) return meta.checksum === remote.checksum;
+    return true;
+  }
 
-  // Metadata API unreachable — accept a recent cache (graceful offline)
+  // Dataset API unreachable — accept a recent cache (graceful offline)
   return now - meta.storedAt < OFFLINE_TTL_MS;
 }
 

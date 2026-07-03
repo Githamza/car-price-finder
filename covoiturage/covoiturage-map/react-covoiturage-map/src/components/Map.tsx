@@ -10,8 +10,17 @@ import {
 } from "react-leaflet";
 import { LatLngBounds, PathOptions } from "leaflet";
 import { useTripData } from "../contexts/TripDataContext";
-import { formatDate, formatDistance, formatNumber } from "../utils/format";
-import { useTripIndex, TripIndex, isClusterFeature } from "../hooks/useTripIndex";
+import {
+  formatDate,
+  formatDistance,
+  formatMonthFromTitle,
+  formatNumber,
+} from "../utils/format";
+import {
+  useTripIndex,
+  IndexedTrips,
+  isClusterFeature,
+} from "../hooks/useTripIndex";
 import { MIN_ZOOM_FOR_TRIPS, MAX_VISIBLE_TRIPS } from "../config";
 import {
   MapProps,
@@ -116,31 +125,30 @@ const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
 // the operator-class breakdown is computed lazily, only when the popup opens
 const ClusterPopup: React.FC<{
   cluster: ClusterView;
-  index: TripIndex | null;
-}> = ({ cluster, index }) => {
-  const { tripData } = useTripData();
+  indexed: IndexedTrips | null;
+}> = ({ cluster, indexed }) => {
   const map = useMap();
 
   const avgDistance = cluster.count > 0 ? cluster.sumDistance / cluster.count : 0;
 
   const topOperatorClass = useMemo(() => {
-    if (cluster.clusterId === null || !index) return null;
+    if (cluster.clusterId === null || !indexed) return null;
     const counts: Record<string, number> = {};
-    for (const leaf of index.getLeaves(cluster.clusterId, 100)) {
-      const trip = tripData[leaf.properties.tripIndex];
+    for (const leaf of indexed.index.getLeaves(cluster.clusterId, 100)) {
+      const trip = indexed.trips[leaf.properties.tripIndex];
       if (trip?.operator_class) {
         counts[trip.operator_class] = (counts[trip.operator_class] || 0) + 1;
       }
     }
     const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     return best ? best[0] : null;
-  }, [cluster.clusterId, index, tripData]);
+  }, [cluster.clusterId, indexed]);
 
   const handleZoomClick = () => {
     const targetZoom =
-      cluster.clusterId !== null && index
+      cluster.clusterId !== null && indexed
         ? Math.min(
-            index.getClusterExpansionZoom(cluster.clusterId),
+            indexed.index.getClusterExpansionZoom(cluster.clusterId),
             MIN_ZOOM_FOR_TRIPS
           )
         : MIN_ZOOM_FOR_TRIPS;
@@ -334,14 +342,22 @@ const MapContent: React.FC<MapContentProps> = React.memo(
 );
 
 const Map: React.FC<MapProps> = ({ onStatsChange }) => {
-  const { tripData, progress, selectedTrip, selectTrip, clearSelectedTrip } =
-    useTripData();
+  const {
+    tripData,
+    progress,
+    selectedTrip,
+    dataTitle,
+    availableMonths,
+    selectTrip,
+    clearSelectedTrip,
+    selectMonth,
+  } = useTripData();
 
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
   const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
 
-  const index = useTripIndex(tripData);
+  const indexed = useTripIndex(tripData);
 
   const handleZoomChange = useCallback((zoom: number) => {
     setCurrentZoom(zoom);
@@ -353,15 +369,18 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
 
   const showIndividualTrips = currentZoom >= MIN_ZOOM_FOR_TRIPS;
 
-  // One spatial-index query per view change — no full-array scans
+  // One spatial-index query per view change — no full-array scans.
+  // Trips resolve against the index's own snapshot (indexed.trips), which can
+  // lag behind tripData while a throttled rebuild is pending.
   const { visibleTrips, visibleClusters, totalTripsInView } = useMemo(() => {
-    if (!index || !currentBounds) {
+    if (!indexed || !currentBounds) {
       return {
         visibleTrips: [] as Trip[],
         visibleClusters: [] as ClusterView[],
         totalTripsInView: 0,
       };
     }
+    const { index, trips: indexedTrips } = indexed;
 
     const bbox: [number, number, number, number] = [
       currentBounds.getWest(),
@@ -376,7 +395,8 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       const trips: Trip[] = [];
       for (const feature of features) {
         if (!isClusterFeature(feature)) {
-          trips.push(tripData[feature.properties.tripIndex]);
+          const trip = indexedTrips[feature.properties.tripIndex];
+          if (trip) trips.push(trip);
         }
       }
       return {
@@ -386,35 +406,38 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       };
     }
 
-    const clusters: ClusterView[] = features.map((feature) => {
+    const clusters: ClusterView[] = [];
+    for (const feature of features) {
       const [lon, lat] = feature.geometry.coordinates;
       if (isClusterFeature(feature)) {
-        return {
+        clusters.push({
           key: `c${feature.id}`,
           clusterId: feature.id as number,
           lat,
           lon,
           count: feature.properties.point_count,
           sumDistance: feature.properties.sumDistance,
-        };
+        });
+        continue;
       }
-      const trip = tripData[feature.properties.tripIndex];
-      return {
+      const trip = indexedTrips[feature.properties.tripIndex];
+      if (!trip) continue;
+      clusters.push({
         key: `p${feature.properties.tripIndex}`,
         clusterId: null,
         lat,
         lon,
         count: 1,
         sumDistance: trip.journey_distance,
-      };
-    });
+      });
+    }
 
     return {
       visibleTrips: [] as Trip[],
       visibleClusters: clusters,
       totalTripsInView: clusters.reduce((sum, c) => sum + c.count, 0),
     };
-  }, [index, currentBounds, currentZoom, tripData]);
+  }, [indexed, currentBounds, currentZoom]);
 
   // Update parent component with stats about the current map view
   useEffect(() => {
@@ -460,9 +483,26 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         </div>
       )}
 
-      {/* Source Data Banner */}
-      <div className="fixed top-0 left-0 right-0 bg-green-600 text-white p-2 text-center shadow-xl z-[1000] font-medium">
-        Trajets réalisés en covoiturage au mois de février 2025{" "}
+      {/* Source Data Banner with month navigation */}
+      <div className="fixed top-0 left-0 right-0 bg-green-600 text-white p-2 shadow-xl z-[1000] font-medium flex items-center justify-center gap-2 flex-wrap">
+        <span>Trajets réalisés en covoiturage</span>
+        {availableMonths.length > 0 && dataTitle ? (
+          <select
+            value={dataTitle}
+            onChange={(e) => selectMonth(e.target.value)}
+            disabled={!progress.done}
+            aria-label="Mois des données"
+            className="bg-green-700 text-white text-sm rounded border border-green-400 px-2 py-1 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+          >
+            {availableMonths.map((month) => (
+              <option key={month.id} value={month.title}>
+                {formatMonthFromTitle(month.title) ?? month.title}
+              </option>
+            ))}
+          </select>
+        ) : (
+          dataTitle && <span>— {formatMonthFromTitle(dataTitle)}</span>
+        )}
         <a
           href="https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/#/resources"
           target="_blank"
@@ -511,7 +551,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
                 isEndPoint={openPopup.isEndPoint}
               />
             ) : (
-              <ClusterPopup cluster={openPopup.cluster} index={index} />
+              <ClusterPopup cluster={openPopup.cluster} indexed={indexed} />
             )}
           </Popup>
         )}

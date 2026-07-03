@@ -15,6 +15,17 @@ export interface TripAggregates {
 
 export type TripIndex = Supercluster<TripPointProps, TripAggregates>;
 
+/**
+ * The index and the exact trips array it was built from. Consumers must
+ * resolve `tripIndex` properties against this snapshot — never against the
+ * live tripData, which may already hold a newer (e.g. different-month)
+ * array while the throttled index rebuild is still pending.
+ */
+export interface IndexedTrips {
+  index: TripIndex;
+  trips: Trip[];
+}
+
 export function isClusterFeature(
   feature:
     | Supercluster.ClusterFeature<TripAggregates>
@@ -34,13 +45,13 @@ const REBUILD_INTERVAL_MS = 1500;
  * One index answers both "clusters in bbox at zoom Z" (low zoom) and
  * "individual trips in bbox" (zoom >= MIN_ZOOM_FOR_TRIPS).
  */
-export function useTripIndex(trips: Trip[]): TripIndex | null {
-  const [index, setIndex] = useState<TripIndex | null>(null);
+export function useTripIndex(trips: Trip[]): IndexedTrips | null {
+  const [indexed, setIndexed] = useState<IndexedTrips | null>(null);
   const lastBuildRef = useRef(0);
 
   useEffect(() => {
     if (trips.length === 0) {
-      setIndex(null);
+      setIndexed(null);
       return;
     }
 
@@ -68,7 +79,7 @@ export function useTripIndex(trips: Trip[]): TripIndex | null {
           properties: { tripIndex: i },
         }))
       );
-      setIndex(sc);
+      setIndexed({ index: sc, trips });
     };
 
     const sinceLastBuild = performance.now() - lastBuildRef.current;
@@ -80,5 +91,5 @@ export function useTripIndex(trips: Trip[]): TripIndex | null {
     return () => clearTimeout(timer);
   }, [trips]);
 
-  return index;
+  return indexed;
 }

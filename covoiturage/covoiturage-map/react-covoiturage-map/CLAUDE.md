@@ -25,6 +25,7 @@ Interactive map of French carpooling trips (covoiturage), built with React + Typ
 ## Data source (important)
 
 - Dataset: "Trajets réalisés en covoiturage — Registre de Preuve de Covoiturage" on data.gouv.fr (dataset id `5e8ee97c16601da4ee24ffb7`). One CSV per month, each **300–400 MB** (~500–600k trips/month). Never download one whole-file into memory.
+- The app discovers the monthly files at runtime via `GET /api/2/datasets/<id>/resources/?page_size=50&type=main` (newest first) and defaults to the latest; a banner dropdown navigates months (`selectMonth` in the context). Variant exports (`*-sans-covoit-idfm.csv`) are filtered out in `filterMonthlyResources`.
 - The CSV is **semicolon-delimited** (`;`), quoted fields, header row. Real columns (verified live):
   `journey_id`, `trip_id`, `journey_start_datetime`, `journey_start_date`, `journey_start_time`, `journey_start_lon`, `journey_start_lat`, `journey_start_insee`, `journey_start_department`, `journey_start_town`, `journey_start_towngroup`, `journey_start_country`, `journey_end_*` (same shape), `passenger_seats`, `operator_class`, `journey_distance` (meters), `journey_duration` (minutes), `has_incentive` (OUI/NON).
   There is **no `operator` column** — only `operator_class` (A/B/C). Coordinates are truncated to ~3 decimals for anonymization.
@@ -45,5 +46,7 @@ The CSV is stream-parsed progressively (fetch `ReadableStream` → `TextDecoder`
 - `fadeAnimation` is disabled on the map: with StrictMode remounts, Leaflet's tile fade left tiles stuck at opacity 0.
 - Do **not** fitBounds over the data — the dataset includes overseas/foreign trips, so data bounds center the map over the Middle East. The France default view is intentional.
 - `www.data.gouv.fr` (redirect + metadata endpoints) 503s intermittently; the loader streams from the resource's direct `static.data.gouv.fr` URL when metadata is available and retries once. Keep failures non-fatal.
-- Trips arrive ordered by datetime, so the row cap keeps the first ~N trips of the month (early February), not a spatial sample.
+- Trips arrive ordered by datetime, so the row cap keeps the first ~N trips of the month, not a spatial sample.
+- The IndexedDB cache holds ONE month (the last viewed); switching months re-streams. Cache meta stores the resource id + title.
+- `useTripIndex` returns `{index, trips}` as one snapshot — always resolve `tripIndex` properties against that snapshot, never against live `tripData`. The index rebuild is throttled, so during month switches the live array and the index disagree (resolving against tripData crashed the Map with undefined trips).
 - UI copy is in **French**; number/date formatting uses `fr-FR` locale (see `src/utils/format.ts`).

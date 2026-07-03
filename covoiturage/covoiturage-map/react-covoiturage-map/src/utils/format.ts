@@ -9,6 +9,17 @@ export function formatDistance(meters: number): string {
   })} km`;
 }
 
+/** "2026-05.csv" → "mai 2026" (null when the title has no YYYY-MM prefix) */
+export function formatMonthFromTitle(title: string): string | null {
+  const match = /^(\d{4})-(\d{2})/.exec(title);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
 export function formatDate(dateString: string): string {
   if (!dateString) return "N/A";
 
