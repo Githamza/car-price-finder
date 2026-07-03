@@ -483,7 +483,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
   return (
     <div className="map-wrapper relative w-full h-screen">
       {isLoading && (
-        <div className="absolute inset-0 bg-slate-800 bg-opacity-70 z-[2000] flex flex-col items-center justify-center">
+        <div className="absolute inset-0 bg-slate-800/70 z-[2000] flex flex-col items-center justify-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-white text-xl font-semibold">
             Chargement des données...
@@ -533,7 +533,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       </MapContainer>
 
       {/* Stats display */}
-      <div className="absolute bottom-5 right-5 bg-white bg-opacity-80 rounded p-2 text-sm z-10">
+      <div className="absolute bottom-5 right-5 bg-white/80 rounded p-2 text-sm z-10">
         <div>Zoom: {currentZoom}</div>
         <div>
           {showIndividualTrips

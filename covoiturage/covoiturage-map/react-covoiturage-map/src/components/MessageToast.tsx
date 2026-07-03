@@ -33,7 +33,7 @@ const MessageToast: React.FC<MessageToastProps> = ({ type, text }) => {
 
   return (
     <div
-      className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 ${getBackgroundColor()} text-white px-4 py-2 rounded-md shadow-md z-50 transition-opacity duration-300 ease-in-out`}
+      className={`fixed bottom-5 left-1/2 -translate-x-1/2 ${getBackgroundColor()} text-white px-4 py-2 rounded-md shadow-md z-50 transition-opacity duration-300 ease-in-out`}
     >
       {text}
     </div>
