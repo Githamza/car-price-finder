@@ -20,11 +20,20 @@ const META_KEY = "meta";
 const BATCH_SIZE = 25_000;
 const OFFLINE_TTL_MS = 7 * 24 * 3600 * 1000;
 
+// v2: trips are now filtered to metropolitan France at parse time — clear
+// caches written before the filter existed (checksums alone can't tell).
+const DB_VERSION = 2;
+
 function getDb() {
-  return openDB<TripCacheSchema>(DB_NAME, 1, {
-    upgrade(db) {
-      db.createObjectStore("trips");
-      db.createObjectStore("meta");
+  return openDB<TripCacheSchema>(DB_NAME, DB_VERSION, {
+    upgrade(db, oldVersion, _newVersion, tx) {
+      if (oldVersion < 1) {
+        db.createObjectStore("trips");
+        db.createObjectStore("meta");
+      } else {
+        tx.objectStore("trips").clear();
+        tx.objectStore("meta").clear();
+      }
     },
   });
 }

@@ -64,11 +64,36 @@ body {
   }
 
   .info-panel {
-    @apply absolute top-2 right-2 z-50 bg-white/95 p-4 rounded-lg shadow-md transition-all duration-300 ease-in-out;
+    @apply absolute top-16 right-2 left-2 bottom-4 z-50 flex flex-col
+           sm:left-auto sm:right-4 sm:w-[22rem]
+           bg-white/95 backdrop-blur-sm p-4 sm:p-5 rounded-xl shadow-xl
+           border border-gray-200/70
+           transition-all duration-300 ease-in-out;
   }
 
   .info-panel:hover {
-    @apply shadow-lg;
+    @apply shadow-2xl;
+  }
+
+  /* Floating button shown when the panel is collapsed */
+  .info-panel-toggle {
+    @apply absolute top-16 right-4 z-50 flex items-center gap-2
+           bg-white/95 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg
+           border border-gray-200 text-sm font-semibold text-gray-700
+           hover:shadow-xl hover:bg-white transition-all duration-200;
+  }
+
+  /* Content scrolls inside the panel so it never overflows the viewport */
+  .info-panel__body {
+    @apply flex-1 min-h-0 overflow-y-auto -mr-2 pr-2;
+  }
+
+  /* On short/laptop viewports let the panel hug its content instead of
+     stretching the full height */
+  @media (min-height: 900px) {
+    .info-panel {
+      @apply bottom-auto max-h-[calc(100vh-5rem)];
+    }
   }
 
   .legend-item {

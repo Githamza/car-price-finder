@@ -5,7 +5,6 @@ import {
   CircleMarker,
   Polyline,
   Popup,
-  useMap,
   useMapEvents,
 } from "react-leaflet";
 import { LatLngBounds, PathOptions } from "leaflet";
@@ -36,6 +35,7 @@ import {
   MapEventHandlerProps,
   TripPopupProps,
   Trip,
+  SelectedZone,
 } from "../types";
 import teamWheelsLogo from "../assets/images/logo.png";
 
@@ -62,13 +62,13 @@ type OpenPopup =
       isEndPoint: boolean;
       position: [number, number];
     }
-  | { kind: "zone"; zone: FlowZone; position: [number, number] }
   | { kind: "flow"; arc: FlowArc; position: [number, number] };
 
 // Component to track map events and bounds
 const MapEventHandler: React.FC<MapEventHandlerProps> = ({
   onBoundsChange,
   onZoomChange,
+  onBackgroundClick,
 }) => {
   const map = useMapEvents({
     moveend: () => {
@@ -76,6 +76,11 @@ const MapEventHandler: React.FC<MapEventHandlerProps> = ({
     },
     zoomend: () => {
       onZoomChange(map.getZoom());
+    },
+    // Only reaches the map when the click misses every interactive layer —
+    // markers/arcs/lines set bubblingMouseEvents: false
+    click: () => {
+      onBackgroundClick();
     },
   });
 
@@ -155,79 +160,22 @@ const FlowPopup: React.FC<{ arc: FlowArc }> = ({ arc }) => {
   );
 };
 
-// Popup content for a zone: activity summary + top destinations + isolation
-const ZonePopup: React.FC<{
-  zone: FlowZone;
-  model: FlowModel | null;
-  isolated: boolean;
-  onToggleIsolate: () => void;
-  onClose: () => void;
-}> = ({ zone, model, isolated, onToggleIsolate, onClose }) => {
-  const map = useMap();
-
-  const topDestinations = useMemo(() => {
-    if (!model) return [];
-    // Merge by town name — adjacent grid cells can share the same town.
-    // (Plain object because `Map` is shadowed by this component's name.)
-    const byTown: Record<string, number> = {};
-    for (const flow of model.flows) {
-      if (flow.from !== zone.key) continue;
-      const town = model.zones.get(flow.to)?.town ?? "Zone voisine";
-      byTown[town] = (byTown[town] ?? 0) + flow.count;
-    }
-    return Object.entries(byTown)
-      .map(([town, count]) => ({ town, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [model, zone.key]);
-
-  return (
-    <div className="popup-content">
-      <h3 className="text-base font-bold mb-1">{zone.town ?? "Zone"}</h3>
-      <div className="space-y-1">
-        <p>
-          <strong>Départs:</strong> {formatNumber(zone.startCount)} ·{" "}
-          <strong>Arrivées:</strong> {formatNumber(zone.endCount)}
-        </p>
-        {zone.intraCount > 0 && (
-          <p>
-            <strong>Trajets internes:</strong> {formatNumber(zone.intraCount)}
-          </p>
-        )}
-        {topDestinations.length > 0 && (
-          <div>
-            <strong>Top destinations:</strong>
-            <ul className="list-disc ml-4">
-              {topDestinations.map((d, i) => (
-                <li key={i}>
-                  {d.town} ({formatNumber(d.count)})
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="flex gap-2 mt-2">
-          <button
-            onClick={onToggleIsolate}
-            className={`${
-              isolated ? "bg-gray-500 hover:bg-gray-700" : "bg-pink-600 hover:bg-pink-700"
-            } text-white py-1 px-2 rounded text-xs`}
-          >
-            {isolated ? "Tout afficher" : "Isoler ses flux"}
-          </button>
-          <button
-            onClick={() => {
-              onClose();
-              map.setView([zone.lat, zone.lon], map.getZoom() + 2);
-            }}
-            className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
-          >
-            Zoomer
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+// Top destination towns for a zone — merged by town name, since adjacent grid
+// cells can share the same town. (Plain object because `Map` is shadowed.)
+const topDestinationsForZone = (
+  model: FlowModel,
+  zoneKey: string
+): { town: string; count: number }[] => {
+  const byTown: Record<string, number> = {};
+  for (const flow of model.flows) {
+    if (flow.from !== zoneKey) continue;
+    const town = model.zones.get(flow.to)?.town ?? "Zone voisine";
+    byTown[town] = (byTown[town] ?? 0) + flow.count;
+  }
+  return Object.entries(byTown)
+    .map(([town, count]) => ({ town, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 };
 
 interface MapContentProps {
@@ -239,6 +187,7 @@ interface MapContentProps {
   selectedTrip: Trip | null;
   onTripClick: (trip: Trip) => void;
   onOpenPopup: (popup: OpenPopup) => void;
+  onZoneSelect: (zone: FlowZone) => void;
 }
 
 // Memoized map content component — markers carry no mounted popups
@@ -252,29 +201,31 @@ const MapContent: React.FC<MapContentProps> = React.memo(
     selectedTrip,
     onTripClick,
     onOpenPopup,
+    onZoneSelect,
   }) => {
+    // The flow layer stays mounted at street-level zoom while a zone is
+    // isolated, so its (frozen) flows remain visible over individual trips
+    const showFlowLayer = !showIndividualTrips || isolatedZoneKey !== null;
+
     return (
       <>
-        {/* Flow arcs (zoomed out) */}
-        {!showIndividualTrips &&
+        {/* Flow arcs — while isolated, only the selected zone's flows are
+            passed in, so no dimming is needed here */}
+        {showFlowLayer &&
           arcs.map((arc) => {
             const { flow } = arc;
-            const outgoing = flow.from === isolatedZoneKey;
             const incoming = flow.to === isolatedZoneKey;
-            const dimmed =
-              isolatedZoneKey !== null && !outgoing && !incoming;
 
             const weight = 1 + Math.min(6, Math.log2(flow.count));
             const options: PathOptions = {
+              bubblingMouseEvents: false,
               color: incoming ? FLOW_IN_COLOR : FLOW_COLOR,
-              weight: dimmed ? 1 : weight,
-              opacity: dimmed
-                ? 0.06
-                : isolatedZoneKey
-                  ? 0.85
-                  : flow.count === 1
-                    ? 0.3
-                    : 0.55,
+              weight,
+              opacity: isolatedZoneKey
+                ? 0.85
+                : flow.count === 1
+                ? 0.3
+                : 0.55,
             };
 
             return (
@@ -293,21 +244,24 @@ const MapContent: React.FC<MapContentProps> = React.memo(
             );
           })}
 
-        {/* Zone bubbles (zoomed out) */}
-        {!showIndividualTrips &&
+        {/* Zone bubbles — while isolated, only the selected zone and its
+            connected destinations are passed in; soften the destinations so
+            the selected zone stands out but they stay readable */}
+        {showFlowLayer &&
           zones.map((zone) => {
             const activity = zone.startCount + zone.endCount;
             const radius = Math.max(5, Math.min(20, Math.log(activity) * 2.6));
             const intensity = Math.min(255, Math.log(activity) * 18);
-            const dimmed =
+            const connected =
               isolatedZoneKey !== null && zone.key !== isolatedZoneKey;
 
             const options: PathOptions = {
+              bubblingMouseEvents: false,
               fillColor: `rgb(${intensity}, 0, ${255 - intensity})`,
               color: "#fff",
               weight: 1,
-              opacity: dimmed ? 0.15 : 0.9,
-              fillOpacity: dimmed ? 0.12 : 0.75,
+              opacity: connected ? 0.6 : 0.9,
+              fillOpacity: connected ? 0.45 : 0.75,
             };
 
             return (
@@ -318,25 +272,28 @@ const MapContent: React.FC<MapContentProps> = React.memo(
                 pathOptions={options}
                 eventHandlers={{
                   click: () => {
-                    onOpenPopup({
-                      kind: "zone",
-                      zone,
-                      position: [zone.lat, zone.lon],
-                    });
+                    onZoneSelect(zone);
                   },
                 }}
               />
             );
           })}
 
-        {/* Individual trips (street-level zoom) */}
-        {showIndividualTrips &&
-          visibleTrips.map((trip) => {
+        {/* Individual trips (street-level zoom). A selected trip stays
+            rendered at ANY zoom so it can be analyzed while zooming/panning
+            between its départ and arrivée. */}
+        {(showIndividualTrips
+          ? visibleTrips
+          : selectedTrip
+          ? [selectedTrip]
+          : []
+        ).map((trip) => {
             const isSelected =
               selectedTrip !== null &&
               selectedTrip.journey_id === trip.journey_id;
 
             const startMarkerOptions: PathOptions = {
+              bubblingMouseEvents: false,
               fillColor: isSelected ? "#30c0ff" : "#3388ff",
               color: "#fff",
               weight: 1,
@@ -345,6 +302,7 @@ const MapContent: React.FC<MapContentProps> = React.memo(
             };
 
             const endMarkerOptions: PathOptions = {
+              bubblingMouseEvents: false,
               fillColor: isSelected ? "#ff30c0" : "#ff3388",
               color: "#fff",
               weight: 1,
@@ -353,6 +311,7 @@ const MapContent: React.FC<MapContentProps> = React.memo(
             };
 
             const lineOptions: PathOptions = {
+              bubblingMouseEvents: false,
               color: isSelected ? "#30c0ff" : "#3388ff",
               weight: isSelected ? 4 : 2,
               opacity: isSelected ? 0.8 : 0.5,
@@ -426,7 +385,7 @@ const MapContent: React.FC<MapContentProps> = React.memo(
   }
 );
 
-const Map: React.FC<MapProps> = ({ onStatsChange }) => {
+const Map: React.FC<MapProps> = ({ onStatsChange, onSelectedZoneChange }) => {
   const {
     tripData,
     progress,
@@ -441,7 +400,14 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
   const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
-  const [isolatedZoneKey, setIsolatedZoneKey] = useState<string | null>(null);
+  // Selecting a zone FREEZES the clustering: the flow model keeps being built
+  // at the zoom bucket captured here, so the selected cluster and its flows
+  // (same trips, same counts) stay identical while the user zooms/pans.
+  const [isolated, setIsolated] = useState<{
+    key: string;
+    bucket: number;
+  } | null>(null);
+  const isolatedZoneKey = isolated?.key ?? null;
 
   const indexed = useTripIndex(tripData);
 
@@ -455,26 +421,33 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
 
   const showIndividualTrips = currentZoom >= MIN_ZOOM_FOR_TRIPS;
 
-  // Close popups that belong to the other view mode when crossing the
-  // flow/individual-trips threshold
-  useEffect(() => {
-    setOpenPopup((current) => {
-      if (!current) return current;
-      const isTripPopup = current.kind === "trip";
-      return isTripPopup === showIndividualTrips ? current : null;
-    });
-  }, [showIndividualTrips]);
-
   // Flow model: recomputed only when the data or the zoom bucket changes —
   // panning just filters it
   const zoomBucket = Math.min(
     MIN_ZOOM_FOR_TRIPS - 1,
     Math.max(4, Math.round(currentZoom))
   );
+
+  // While a zone is isolated the model is pinned to the bucket captured at
+  // selection time — zooming rescales the SAME clusters instead of
+  // re-aggregating them — and it keeps being built even at street-level zoom
+  // so the isolated flows stay visible over the individual trips.
+  const effectiveBucket = isolated?.bucket ?? zoomBucket;
+  const modelDisabled = showIndividualTrips && isolated === null;
+
   const flowModel = useMemo(() => {
-    if (tripData.length === 0 || showIndividualTrips) return null;
-    return buildFlowModel(tripData, cellSizeForZoom(zoomBucket));
-  }, [tripData, zoomBucket, showIndividualTrips]);
+    if (tripData.length === 0 || modelDisabled) return null;
+    return buildFlowModel(tripData, cellSizeForZoom(effectiveBucket));
+  }, [tripData, effectiveBucket, modelDisabled]);
+
+  // Arc geometry only changes when the model is rebuilt or dropped — close a
+  // flow popup then. Trip popups are anchored to fixed coordinates and
+  // survive any zoom change.
+  useEffect(() => {
+    setOpenPopup((current) =>
+      current && current.kind === "flow" ? null : current
+    );
+  }, [flowModel]);
 
   // Visible zones + top flows for the current view
   const { visibleZones, visibleArcs, flowTripsInView } = useMemo(() => {
@@ -490,14 +463,11 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
     const bounds = currentBounds.pad(0.5);
     const inView = (zone: FlowZone) => bounds.contains([zone.lat, zone.lon]);
 
-    const visibleZones: FlowZone[] = [];
-    let flowTripsInView = 0;
-    for (const zone of flowModel.zones.values()) {
-      if (inView(zone)) {
-        visibleZones.push(zone);
-        flowTripsInView += zone.startCount;
-      }
-    }
+    // Arcs first: when a zone is isolated we keep ALL of its flows regardless
+    // of the viewport, so panning away from the selected cluster does not hide
+    // its paths. Every zone touched by a kept isolated flow is force-shown too.
+    const forcedZoneKeys = new Set<string>();
+    if (isolatedZoneKey !== null) forcedZoneKeys.add(isolatedZoneKey);
 
     const visibleArcs: FlowArc[] = [];
     for (const flow of flowModel.flows) {
@@ -505,14 +475,19 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       const fromZone = flowModel.zones.get(flow.from);
       const toZone = flowModel.zones.get(flow.to);
       if (!fromZone || !toZone) continue;
-      if (!inView(fromZone) && !inView(toZone)) continue;
-      if (
-        isolatedZoneKey !== null &&
-        flow.from !== isolatedZoneKey &&
-        flow.to !== isolatedZoneKey
-      ) {
-        continue; // isolation: skip unrelated flows entirely
+
+      if (isolatedZoneKey !== null) {
+        const connected =
+          flow.from === isolatedZoneKey || flow.to === isolatedZoneKey;
+        if (!connected) continue; // isolation: skip unrelated flows entirely
+        // Keep connected flows even when both endpoints are panned off-screen,
+        // and make sure their zones render so the destinations stay visible.
+        forcedZoneKeys.add(flow.from);
+        forcedZoneKeys.add(flow.to);
+      } else if (!inView(fromZone) && !inView(toZone)) {
+        continue;
       }
+
       const arc = arcPoints(
         [fromZone.lat, fromZone.lon],
         [toZone.lat, toZone.lon]
@@ -525,8 +500,41 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       });
     }
 
+    // While isolated, only the selected zone and the zones its flows touch
+    // are drawn — the rest of the (frozen) grid stays hidden.
+    const visibleZones: FlowZone[] = [];
+    let flowTripsInView = 0;
+    for (const zone of flowModel.zones.values()) {
+      const shown =
+        isolatedZoneKey !== null
+          ? forcedZoneKeys.has(zone.key)
+          : inView(zone);
+      if (!shown) continue;
+      visibleZones.push(zone);
+      if (inView(zone)) flowTripsInView += zone.startCount;
+    }
+
     return { visibleZones, visibleArcs, flowTripsInView };
   }, [flowModel, currentBounds, isolatedZoneKey]);
+
+  // Details of the selected (isolated) zone, surfaced to the side panel.
+  // Selecting a zone == isolating it, so this derives straight from the key.
+  const selectedZoneInfo = useMemo<SelectedZone | null>(() => {
+    if (isolatedZoneKey === null || !flowModel) return null;
+    const zone = flowModel.zones.get(isolatedZoneKey);
+    if (!zone) return null;
+    return {
+      town: zone.town ?? "Zone",
+      startCount: zone.startCount,
+      endCount: zone.endCount,
+      intraCount: zone.intraCount,
+      topDestinations: topDestinationsForZone(flowModel, zone.key),
+    };
+  }, [isolatedZoneKey, flowModel]);
+
+  useEffect(() => {
+    onSelectedZoneChange(selectedZoneInfo);
+  }, [selectedZoneInfo, onSelectedZoneChange]);
 
   // Individual trips: queried from BOTH endpoints, so a line stays visible
   // while either end is on screen
@@ -554,11 +562,22 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       const trip = indexedTrips[i];
       if (trip) trips.push(trip);
     }
+    const capped = trips.slice(0, MAX_VISIBLE_TRIPS);
+
+    // Keep the selected trip on the map even after the user pans its départ /
+    // arrivée out of the viewport (or if it fell past the render cap).
+    if (
+      selectedTrip &&
+      !capped.some((t) => t.journey_id === selectedTrip.journey_id)
+    ) {
+      capped.push(selectedTrip);
+    }
+
     return {
-      visibleTrips: trips.slice(0, MAX_VISIBLE_TRIPS),
+      visibleTrips: capped,
       totalTripsInView: trips.length,
     };
-  }, [showIndividualTrips, indexed, currentBounds, currentZoom]);
+  }, [showIndividualTrips, indexed, currentBounds, currentZoom, selectedTrip]);
 
   // Update parent component with stats about the current map view
   useEffect(() => {
@@ -582,25 +601,38 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
     onStatsChange,
   ]);
 
-  // Toggle trip selection
+  // Clicking a trip always selects it — deselection happens by clicking the
+  // map background (a click also opens the trip's popup, so toggling off here
+  // would leave a popup open for a deselected trip)
   const handleTripClick = useCallback(
     (trip: Trip) => {
-      if (selectedTrip && selectedTrip.journey_id === trip.journey_id) {
-        clearSelectedTrip();
-      } else {
-        selectTrip(trip);
-      }
+      selectTrip(trip);
     },
-    [selectedTrip, selectTrip, clearSelectedTrip]
+    [selectTrip]
   );
 
   const handleOpenPopup = useCallback((popup: OpenPopup) => {
     setOpenPopup(popup);
   }, []);
 
-  const toggleIsolation = useCallback((zoneKey: string) => {
-    setIsolatedZoneKey((current) => (current === zoneKey ? null : zoneKey));
-  }, []);
+  // Selecting a zone/cluster isolates it (only its flows and destinations are
+  // shown) and freezes the clustering at the current bucket. Clicking the
+  // same zone again clears the selection; clicking another zone (still a zone
+  // of the FROZEN grid) moves the selection within that grid.
+  const handleZoneSelect = useCallback((zone: FlowZone) => {
+    setIsolated((current) => {
+      if (current?.key === zone.key) return null;
+      return { key: zone.key, bucket: current?.bucket ?? zoomBucket };
+    });
+  }, [zoomBucket]);
+
+  // Clicking empty map (outside any zone, arc or trip) is the ONLY implicit
+  // way to deselect — zooming and panning never clear a selection.
+  const handleBackgroundClick = useCallback(() => {
+    setIsolated(null);
+    clearSelectedTrip();
+    setOpenPopup(null);
+  }, [clearSelectedTrip]);
 
   return (
     <div className="map-wrapper relative w-full h-screen">
@@ -614,12 +646,13 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         </div>
       )}
 
-      {/* Isolation banner */}
-      {isolatedZoneKey !== null && !showIndividualTrips && (
-        <div className="absolute top-14 right-4 z-[1500] bg-pink-600 text-white rounded-full shadow-md px-4 py-1.5 text-sm font-medium flex items-center gap-2">
+      {/* Isolation banner — stays up at any zoom while a zone is selected */}
+      {isolatedZoneKey !== null && (
+        <div className="absolute top-14 left-4 z-[1500] bg-pink-600 text-white rounded-full shadow-md px-4 py-1.5 text-sm font-medium flex items-center gap-2">
           Flux d'une zone isolés
           <button
-            onClick={() => setIsolatedZoneKey(null)}
+            type="button"
+            onClick={() => setIsolated(null)}
             className="font-bold hover:text-pink-200"
             aria-label="Afficher tous les flux"
           >
@@ -629,7 +662,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
       )}
 
       {/* Source Data Banner with month navigation */}
-      <div className="fixed top-0 left-0 right-0 bg-green-600 text-white p-2 shadow-xl z-[1000] font-medium flex items-center justify-center gap-2 flex-wrap">
+      <div className="fixed top-0 left-0 right-0 bg-blue-600 text-white px-2 py-1.5 sm:p-2 shadow-xl z-[1000] text-sm sm:text-base font-medium flex items-center justify-center gap-2 flex-wrap">
         <span>Trajets réalisés en covoiturage</span>
         {availableMonths.length > 0 && dataTitle ? (
           <select
@@ -637,7 +670,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
             onChange={(e) => selectMonth(e.target.value)}
             disabled={!progress.done}
             aria-label="Mois des données"
-            className="bg-green-700 text-white text-sm rounded border border-green-400 px-2 py-1 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            className="bg-blue-700 text-white text-sm rounded border border-blue-400 px-2 py-1 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
           >
             {availableMonths.map((month) => (
               <option key={month.id} value={month.title}>
@@ -674,6 +707,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         <MapEventHandler
           onBoundsChange={handleBoundsChange}
           onZoomChange={handleZoomChange}
+          onBackgroundClick={handleBackgroundClick}
         />
 
         <MapContent
@@ -685,6 +719,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
           selectedTrip={selectedTrip}
           onTripClick={handleTripClick}
           onOpenPopup={handleOpenPopup}
+          onZoneSelect={handleZoneSelect}
         />
 
         {openPopup && (
@@ -697,23 +732,15 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
                 trip={openPopup.trip}
                 isEndPoint={openPopup.isEndPoint}
               />
-            ) : openPopup.kind === "flow" ? (
-              <FlowPopup arc={openPopup.arc} />
             ) : (
-              <ZonePopup
-                zone={openPopup.zone}
-                model={flowModel}
-                isolated={isolatedZoneKey === openPopup.zone.key}
-                onToggleIsolate={() => toggleIsolation(openPopup.zone.key)}
-                onClose={() => setOpenPopup(null)}
-              />
+              <FlowPopup arc={openPopup.arc} />
             )}
           </Popup>
         )}
       </MapContainer>
 
       {/* Stats display */}
-      <div className="absolute bottom-5 right-5 bg-white/80 rounded p-2 text-sm z-10">
+      <div className="absolute bottom-16 right-3 sm:bottom-5 sm:right-5 bg-white/80 rounded p-2 text-xs sm:text-sm z-10">
         <div>Zoom: {currentZoom}</div>
         <div>
           {showIndividualTrips
@@ -721,22 +748,35 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
               (totalTripsInView > visibleTrips.length
                 ? ` / ${formatNumber(totalTripsInView)}`
                 : "")
-            : `Zones: ${formatNumber(visibleZones.length)} · Flux: ${formatNumber(visibleArcs.length)}`}
+            : `Zones: ${formatNumber(
+                visibleZones.length
+              )} · Flux: ${formatNumber(visibleArcs.length)}`}
         </div>
       </div>
 
       {/* Marketing Banner */}
-      <div className="fixed bottom-8 left-10 right-10 bg-blue-600 text-white p-4 text-center shadow-xl z-[1000] font-medium rounded-lg mx-auto flex items-center justify-center">
-        <img src={teamWheelsLogo} alt="TeamWheels Logo" className="h-10 mr-3" />
-        TeamWheels, la solution la plus fluide et originale pour mettre en place
-        le covoiturage dans votre entreprise, pour plus d'infos{" "}
+      <div className="fixed bottom-4 left-3 right-3 sm:bottom-5 sm:left-6 sm:right-6 max-w-4xl mx-auto bg-gradient-to-r from-green-600 to-emerald-500 text-white px-4 py-3 sm:px-6 sm:py-4 text-center shadow-xl ring-2 ring-green-300/60 z-[1000] text-sm sm:text-base font-medium rounded-xl flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+        <img
+          src={teamWheelsLogo}
+          alt="TeamWheels"
+          className="h-8 sm:h-10 drop-shadow"
+        />
+        <span className="hidden sm:inline">
+          <span className="font-extrabold">TeamWheels</span> — boostez votre
+          politique <span className="font-bold">RH &amp; RSE</span> : déployez un
+          covoiturage domicile-travail simple, réduisez votre empreinte carbone
+          et fidélisez vos collaborateurs.
+        </span>
+        <span className="sm:hidden font-bold">
+          TeamWheels — covoiturage domicile-travail pour vos équipes RH &amp; RSE
+        </span>
         <a
           href="https://www.teamwheelsapp.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline font-bold hover:text-blue-200 ml-1"
+          className="inline-flex items-center rounded-full bg-white px-4 py-1.5 text-sm font-bold text-green-700 shadow-md transition hover:bg-green-50 hover:scale-105"
         >
-          cliquez ici
+          Demander une démo →
         </a>
       </div>
     </div>

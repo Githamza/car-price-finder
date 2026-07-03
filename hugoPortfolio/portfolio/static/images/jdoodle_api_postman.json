@@ -1,0 +1,103 @@
+{
+	"info": {
+		"_postman_id": "17efc12f-ab13-49e0-aa29-03a8fc20b23f",
+		"name": "api.jdoodle.com",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "check credit spent",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n   \"clientId\": \"yourId\",\n   \"clientSecret\": \"yourSecret\"\n}"
+				},
+				"url": {
+					"raw": "https://api.jdoodle.com/credit-spent",
+					"protocol": "https",
+					"host": [
+						"api",
+						"jdoodle",
+						"com"
+					],
+					"path": [
+						"credit-spent"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Simple Execute - Success",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"yourId\",\n   \"clientSecret\": \"yourSecret\",\n   \"script\": \"public class MyClass {\\r\\n    public static void main(String args[]) {\\r\\n      int x=10;\\r\\n      int y=25;\\r\\n      int z=x+y;\\r\\n\\r\\n      System.out.println(\\\"Sum of x+y = \\\" + z);\\r\\n    }\\r\\n}\",\n   \"language\": \"java\",\n   \"versionIndex\": \"3\"\n}"
+				},
+				"url": {
+					"raw": "https://stage.jdoodle.com/execute",
+					"protocol": "https",
+					"host": [
+						"stage",
+						"jdoodle",
+						"com"
+					],
+					"path": [
+						"execute"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Simple Execute Error",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n   \"clientId\": \"yourId\",\n   \"clientSecret\": \"yourSecret\",\n   \"script\": \"asdf\",\n   \"language\": \"csharp\",\n   \"versionIndex\": \"4\"\n}"
+				},
+				"url": {
+					"raw": "https://api.jdoodle.com/v1/execute",
+					"protocol": "https",
+					"host": [
+						"api",
+						"jdoodle",
+						"com"
+					],
+					"path": [
+						"v1",
+						"execute"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

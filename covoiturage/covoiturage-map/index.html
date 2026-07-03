@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Visualisation des trajets de covoiturage en France basée sur les données ouvertes du Registre de Preuve de Covoiturage"
+    />
+    <meta
+      name="keywords"
+      content="covoiturage, France, carte, mobilité, transport, data.gouv.fr"
+    />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>Covoiturage en France | Carte Interactive</title>
+
+    <!-- Favicon & Manifest -->
+    <link rel="icon" href="src/assets/favicon.ico" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="src/assets/icon-192.png" />
+
+    <!-- Styles -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      rel="stylesheet"
+    />
+    <link href="src/app/styles.css" rel="stylesheet" />
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+      body {
+        font-family: "Roboto", sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+      .info-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: white;
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        max-width: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="info-panel">
+      <h1 class="text-xl font-bold mb-2">Covoiturage en France</h1>
+      <p class="text-sm mb-4">
+        Visualisation des trajets de covoiturage en France
+      </p>
+      <div class="stats">
+        <div class="stat-item mb-2">
+          <div class="text-xs text-gray-500">Trajets</div>
+          <div class="text-lg font-semibold" id="trip-count">--</div>
+        </div>
+        <div class="stat-item mb-2">
+          <div class="text-xs text-gray-500">Distance totale</div>
+          <div class="text-lg font-semibold" id="total-distance">--</div>
+        </div>
+      </div>
+
+      <!-- Légende de la carte -->
+      <div class="mt-4">
+        <h3 class="text-sm font-medium mb-2">Légende</h3>
+        <div class="map-legend">
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #3388ff"></div>
+            <div class="legend-label">Point de départ</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #ff3388"></div>
+            <div class="legend-label">Point d'arrivée</div>
+          </div>
+          <div class="legend-item">
+            <div
+              style="
+                height: 2px;
+                width: 12px;
+                background-color: #3388ff;
+                margin-right: 6px;
+              "
+            ></div>
+            <div class="legend-label">Trajet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contrôles -->
+      <div class="mt-4">
+        <button id="refresh-btn" class="control-button w-full">
+          Rafraîchir les données
+        </button>
+      </div>
+
+      <!-- Footer -->
+      <div class="mt-6 pt-4 border-t border-gray-200 text-xs text-gray-500">
+        <p>
+          Données :
+          <a
+            href="https://www.data.gouv.fr/fr/datasets/trajets-realises-en-covoiturage-registre-de-preuve-de-covoiturage/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-blue-500 hover:underline"
+            >data.gouv.fr</a
+          >
+        </p>
+        <p class="mt-1">
+          Carte :
+          <a
+            href="https://leafletjs.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-blue-500 hover:underline"
+            >Leaflet</a
+          >
+        </p>
+      </div>
+    </div>
+
+    <script src="src/app/main.js"></script>
+
+    <!-- Script pour installation PWA -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/sw.js")
+            .then((registration) => {
+              console.log(
+                "Service Worker enregistré avec succès:",
+                registration
+              );
+            })
+            .catch((error) => {
+              console.log("Échec d'enregistrement du Service Worker:", error);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

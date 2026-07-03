@@ -1,0 +1,12 @@
+<h1 id="typed-title" style="height: 20px; display: inline"></h1>
+{{ $strings := delimit .Params.typedjstitle ", " }}
+<script>
+  var typestext = "{{ $strings }}";
+  console.log("test", typestext);
+  var typed = new Typed("#typed-title", {
+    strings: typestext.split(","),
+    typeSpeed: 100,
+    loop: true,
+    cursorChar: "_",
+  });
+</script>

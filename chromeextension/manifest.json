@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "Bubble.io Theme Updater",
+    "version": "1.0",
+    "description": "Update Bubble.io color styles from Material Theme JSON",
+    "permissions": ["activeTab"],
+    "action": {
+      "default_popup": "popup.html"
+    },
+    "content_scripts": [
+      {
+        "matches": ["*://*.bubble.io/*"],
+        "js": ["content.js"]
+      }
+    ]
+  }

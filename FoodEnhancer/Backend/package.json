@@ -1,0 +1,21 @@
+{
+  "name": "foodenhancer-function",
+  "version": "1.0.0",
+  "description": "Azure Function for FoodEnhancer image enhancement API",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "prestart": "npm run build",
+    "start": "func start",
+    "test": "node test-endpoints.js",
+    "test:endpoints": "node test-endpoints.js"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^4.9.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "WEBSITE_SLOT_NAME": "Production",
+    "FUNCTIONS_EXTENSION_VERSION": "~3",
+    "ScmType": "None",
+    "WEBSITE_AUTH_ENABLED": "False",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "InstrumentationKey=2543275c-6912-4c6c-b753-d70557cec310;IngestionEndpoint=https://westeurope-1.in.applicationinsights.azure.com/",
+    "APPINSIGHTS_INSTRUMENTATIONKEY": "2543275c-6912-4c6c-b753-d70557cec310",
+    "WEBSITE_NODE_DEFAULT_VERSION": "12.18.0",
+    "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "DefaultEndpointsProtocol=https;AccountName=storageaccountdesko8072;AccountKey=cmSkqqzNf98GxL4H2w+vIR9zumxLh/gly24nrMREwc+h2RVziI9KZmUHzkro06mlUn1zLZ+wMkvmeUooq+RmwQ==;EndpointSuffix=core.windows.net",
+    "WEBSITE_CONTENTSHARE": "deskopeningbb54",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "WEBSITE_SITE_NAME": "deskopening",
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=storageaccountdesko8072;AccountKey=cmSkqqzNf98GxL4H2w+vIR9zumxLh/gly24nrMREwc+h2RVziI9KZmUHzkro06mlUn1zLZ+wMkvmeUooq+RmwQ==;EndpointSuffix=core.windows.net"
+  }
+}

@@ -1,0 +1,117 @@
+/* Styles supplémentaires pour l'application de covoiturage */
+
+/* Styles pour les popups Leaflet */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.2);
+}
+
+.leaflet-popup-content {
+  margin: 13px 19px;
+  line-height: 1.4;
+}
+
+.popup-content h3 {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0 0 8px 0;
+  color: #3b82f6;
+}
+
+.popup-content p {
+  font-size: 13px;
+  margin: 5px 0;
+  color: #4b5563;
+}
+
+/* Styles pour le panneau d'informations */
+.info-panel {
+  background-color: rgba(255, 255, 255, 0.95);
+  transition: all 0.3s ease;
+}
+
+.info-panel:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.stat-item {
+  background-color: #f3f4f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.stat-item:hover {
+  background-color: #e5e7eb;
+  transform: translateY(-2px);
+}
+
+/* Animation pour le chargement des données */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.loading {
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Styles pour la légende de la carte */
+.map-legend {
+  background-color: white;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.legend-label {
+  color: #4b5563;
+}
+
+/* Styles pour les boutons de contrôle */
+.control-button {
+  background-color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-button:hover {
+  background-color: #f8fafc;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.control-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}

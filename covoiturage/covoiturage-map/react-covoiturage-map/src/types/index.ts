@@ -24,6 +24,21 @@ export interface MapStats {
   totalTripsInView: number;
 }
 
+// A destination town of a selected zone, with its trip count
+export interface ZoneDestination {
+  town: string;
+  count: number;
+}
+
+// Details of the currently selected zone/cluster, surfaced to the InfoPanel
+export interface SelectedZone {
+  town: string;
+  startCount: number;
+  endCount: number;
+  intraCount: number;
+  topDestinations: ZoneDestination[];
+}
+
 // Message structure
 export interface Message {
   type: "success" | "error" | "warning" | "info";
@@ -72,15 +87,19 @@ export interface TripDataContextType {
 // Props types for components
 export interface MapProps {
   onStatsChange: (stats: MapStats) => void;
+  onSelectedZoneChange: (zone: SelectedZone | null) => void;
 }
 
 export interface InfoPanelProps {
   mapStats: MapStats | null;
+  selectedZone: SelectedZone | null;
 }
 
 export interface MapEventHandlerProps {
   onBoundsChange: (bounds: LatLngBounds) => void;
   onZoomChange: (zoom: number) => void;
+  /** Click on the map background (not on any zone/arc/trip) — deselects */
+  onBackgroundClick: () => void;
 }
 
 export interface TripPopupProps {

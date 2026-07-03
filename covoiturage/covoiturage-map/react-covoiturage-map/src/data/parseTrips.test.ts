@@ -33,7 +33,24 @@ describe("parseTripsCsv", () => {
     const trips = parseTripsCsv(`${HEADER}\n${badRow}\n${ROW}\n`);
     expect(trips).toHaveLength(1);
   });
+
+  it("drops rows with a non-France country", () => {
+    const foreignRow = ROW.replace(
+      '"Montpellier Méditerranée Métropole";"France";1',
+      '"Montpellier Méditerranée Métropole";"Suisse";1'
+    );
+    const trips = parseTripsCsv(`${HEADER}\n${foreignRow}\n${ROW}\n`);
+    expect(trips).toHaveLength(1);
+  });
 });
+
+const BASE_ROW = {
+  journey_id: "x",
+  journey_start_lat: "48.85",
+  journey_start_lon: "2.35",
+  journey_end_lat: "45.76",
+  journey_end_lon: "4.84",
+};
 
 describe("rowToTrip", () => {
   it("returns null when start coordinates are missing", () => {
@@ -42,13 +59,51 @@ describe("rowToTrip", () => {
     );
   });
 
-  it("leaves end coordinates undefined when absent", () => {
-    const trip = rowToTrip({
-      journey_id: "x",
-      journey_start_lat: "48.85",
-      journey_start_lon: "2.35",
-    });
-    expect(trip?.journey_end_lat).toBeUndefined();
+  it("returns null when end coordinates are missing (unknown destination)", () => {
+    expect(
+      rowToTrip({ ...BASE_ROW, journey_end_lat: "", journey_end_lon: "" })
+    ).toBe(null);
+  });
+
+  it("keeps metropolitan-France trips without a country column", () => {
+    const trip = rowToTrip(BASE_ROW);
+    expect(trip?.journey_end_lat).toBe(45.76);
     expect(trip?.passenger_seats).toBe(1);
+  });
+
+  it("drops overseas coordinates even when the country is France", () => {
+    // La Réunion — French, but outside the metropolitan map view
+    expect(
+      rowToTrip({
+        ...BASE_ROW,
+        journey_end_lat: "-21.11",
+        journey_end_lon: "55.53",
+        journey_start_country: "France",
+        journey_end_country: "France",
+      })
+    ).toBe(null);
+  });
+
+  it("drops trips with a foreign endpoint inside the bbox", () => {
+    // Geneva is inside the metropolitan bounding box but not in France
+    expect(
+      rowToTrip({
+        ...BASE_ROW,
+        journey_end_lat: "46.20",
+        journey_end_lon: "6.14",
+        journey_start_country: "France",
+        journey_end_country: "Suisse",
+      })
+    ).toBe(null);
+  });
+
+  it("keeps Corsica trips", () => {
+    expect(
+      rowToTrip({
+        ...BASE_ROW,
+        journey_end_lat: "41.92",
+        journey_end_lon: "8.74",
+      })
+    ).not.toBe(null);
   });
 });

@@ -1,0 +1,98 @@
+[
+  {
+    "id": "1",
+    "promptTitle": "Moody Food Photography",
+    "prompt": "Keep the same food , do not substitute the actual one with another ,   juste change the styling of the photography  as follow : A highly detailed food photography style featuring a close-up composition of the main dish centered on a sleek black plate, captured from a slightly elevated overhead angle approximately 30-45 degrees downward to emphasize height and layers. The background is a deep, inky black void with subtle blurred gradients and faint reflections on a dark wooden or matte surface, creating a moody, intimate, and dramatic atmosphere. Lighting is low-key and directional, likely from the side or top-left, casting soft golden highlights and subtle shadows that accentuate textures like the glossy sesame seeds on a toasted bun, melted cheese drips, crisp lettuce veins, and juicy burger patty edges, while evoking a sense of freshness and warmth. Use a shallow depth of field (around f/2.8-f/4) to keep the foreground food in razor-sharp focus with intricate details—such as steam-like sheen on fries, tiny pink peppercorn scatters, and a small cherry tomato garnish—while softly blurring the distant elements for a bokeh effect. Color grading is rich and saturated with warm earthy tones dominating (golden browns, vibrant greens, reds, and yellows), high contrast between the bright food and dark surroundings, and a slight vignette to draw the eye inward. Props include a wooden-handled knife skewer piercing the top for stability, thick wedge-cut fries arranged casually beside the burger, a small dark blue dipping sauce bowl with creamy white contents, and a silver fork positioned at the lower left. Overall aesthetic is professional restaurant menu quality, appetizing, tactile, and immersive, with no visible distractions or bright elements outside the plate. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "moody-food",
+    "resultImage": "/filters/moody-food.png"
+  },
+  {
+    "id": "2",
+    "promptTitle": "Bright & Airy Lifestyle",
+    "prompt": "Apply the following style to the image: A bright, airy food photography style featuring natural daylight streaming through large windows, creating soft, diffused lighting that bathes the scene in warm, natural tones. The composition is shot from a 45-degree angle, slightly elevated to show both the top and side of the dish, with plenty of negative space around the food for a clean, minimalist aesthetic. The background consists of light, neutral surfaces like white marble countertops, light wood cutting boards, or soft linen tablecloths in cream or light gray tones. Use a medium depth of field (f/5.6-f/8) to keep the main dish sharp while maintaining some background context. The lighting creates gentle shadows that add depth without being harsh, with highlights that make the food appear fresh and inviting. Color grading emphasizes natural, slightly desaturated tones with a warm white balance, subtle contrast, and soft shadows. Props include rustic elements like ceramic bowls, wooden spoons, fresh herbs as garnishes, and natural materials that complement the food. The overall aesthetic is modern, Instagram-worthy, clean, and approachable, perfect for lifestyle blogs and social media content. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "bright-lifestyle",
+    "resultImage": "/filters/bright-lifestyle.png"
+  },
+  {
+    "id": "3",
+    "promptTitle": "Vintage Film Aesthetic",
+    "prompt": "Apply the following style to the image: A nostalgic, vintage film photography style that mimics classic 35mm film cameras from the 1970s-1980s, featuring warm, slightly faded color tones with a subtle grain texture throughout the image. The composition is shot from a straight-on or slightly elevated angle, often including the edge of the plate or table to create a sense of place and time. The background incorporates vintage elements like distressed wooden tables, retro wallpaper patterns, or antique kitchen surfaces that add character and storytelling elements. Lighting is soft and even, avoiding harsh shadows, with a slight warm tint that enhances the nostalgic feel. Use a medium depth of field (f/4-f/5.6) to maintain focus on the food while keeping some background elements visible for context. Color grading features warm, muted tones with slightly reduced saturation, subtle contrast, and a slight sepia or warm filter overlay that mimics aged film. Props include vintage kitchen items like old-fashioned plates, retro utensils, classic glassware, or antique table linens that complement the food and enhance the nostalgic atmosphere. The overall aesthetic is cozy, timeless, and reminiscent of family gatherings and traditional home cooking, with a focus on comfort and tradition. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "vintage-film",
+    "resultImage": "/filters/vintage-film.png"
+  },
+  {
+    "id": "4",
+    "promptTitle": "High-Key Studio Lighting",
+    "prompt": "Apply the following style to the image: A professional studio photography style featuring bright, even lighting that eliminates most shadows and creates a clean, commercial aesthetic perfect for product photography and advertising. The composition is shot from directly overhead (90-degree angle) or at a very slight angle to showcase the food's structure and arrangement with maximum clarity. The background is pure white or very light neutral tones, creating a high-key effect that makes the food pop against the bright surface. Lighting is multi-directional and diffused, using softboxes or ring lights to create even illumination without harsh shadows or highlights. Use a deep depth of field (f/8-f/11) to ensure the entire dish is in sharp focus from front to back, perfect for showcasing all details and textures. Color grading emphasizes bright, vibrant colors with high contrast, crisp whites, and minimal shadow detail. Props are minimal and clean, often just the food itself or simple, neutral serving pieces that don't distract from the main subject. The overall aesthetic is professional, commercial, clean, and modern, ideal for restaurant menus, cookbooks, and food packaging where clarity and professionalism are paramount. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "high-key-studio",
+    "resultImage": "/filters/high-key-studio.png"
+  },
+  {
+    "id": "6",
+    "promptTitle": "Warm Sunset Lighting",
+    "prompt": "Apply the following style to the image: A warm, golden-hour food photography style featuring soft, directional lighting that mimics the warm glow of sunset. The composition is shot from a top angle with the light source positioned to create long, soft shadows and warm highlights. The background incorporates warm, earthy tones like golden browns, warm grays, or soft cream surfaces that complement the sunset lighting. Lighting creates a warm, golden glow with soft shadows that add depth and dimension, while highlights have a subtle orange-gold tint. Use a shallow depth of field (f/2.8-f/4) to keep the main dish sharp while creating a dreamy, atmospheric background. Color grading emphasizes warm, golden tones with enhanced oranges and yellows, reduced blues, and a slight warm filter overlay. Props include natural materials like wooden boards, ceramic plates, or linen napkins in warm, earthy colors. The overall aesthetic is cozy, romantic, and inviting, perfect for creating a warm, welcoming atmosphere that makes food look comforting and delicious. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "warm-sunset",
+    "resultImage": "/filters/warm-sunset.png"
+  },
+  {
+    "id": "7",
+    "promptTitle": "Urban Street Food",
+    "prompt": "Apply the following style to the image: A dynamic, urban street food photography style featuring the dish in an authentic street food environment. The composition is shot from a close-up angle that captures both the food and hints of the urban setting, with the food as the main focus. The background includes urban elements like brick walls, street signs, food trucks, or city textures that add character and authenticity. Lighting is natural and slightly dramatic, often with a mix of natural daylight and urban lighting sources, creating interesting shadows and highlights. Use a medium depth of field (f/4-f/5.6) to keep the food sharp while maintaining some urban context in the background. Color grading emphasizes urban, gritty tones with enhanced contrast, slightly desaturated colors, and a modern, edgy feel. Props include street food elements like paper wrappers, street vendor signs, or urban textures that complement the food. The overall aesthetic is authentic, urban, and street-level, perfect for food trucks, street food blogs, and urban food culture content. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "urban-street",
+    "resultImage": "/filters/urban-street.png"
+  },
+  {
+    "id": "8",
+    "promptTitle": "Elegant Fine Dining",
+    "prompt": "Apply the following style to the image: A sophisticated, fine dining photography style featuring the dish in an elegant, upscale restaurant setting. The composition is shot from a refined angle that showcases the food's presentation and plating artistry, often including elegant table settings and fine dining atmosphere. The background incorporates luxury elements like white tablecloths, fine china, crystal glassware, or elegant restaurant interiors that convey sophistication and quality. Lighting is refined and directional, creating elegant shadows and highlights that accentuate the food's premium appearance. Use a medium depth of field (f/4-f/5.6) to keep the main dish sharp while maintaining some elegant background context. Color grading emphasizes refined, sophisticated tones with balanced contrast, natural colors, and a premium, polished feel. Props include fine dining elements like silver cutlery, crystal glasses, elegant plates, or luxury table settings that complement the food. The overall aesthetic is premium, sophisticated, and upscale, perfect for high-end restaurants, luxury food brands, and premium culinary content. IMPORTANT: You should keep the details of the original meal, you should only apply the new style. Realistic 8k quality.",
+    "thumbnail": "elegant-dining",
+    "resultImage": "/filters/elegant-dining.png"
+  },
+
+  {
+    "id": "9",
+    "promptTitle": "new",
+    "prompt": "Analyse the actual meal, all the details , you should keep the details of the original meal, you should only apply the new style. A vibrant, hyper-realistic product photography style in a studio setting, featuring a close-up side view composition of the main subject centered horizontally in the frame, captured from a low angle slightly below eye level to emphasize height and layering. The background is a smooth, solid vibrant yellow gradient fading subtly from deeper orange-yellow at the top to lighter pale yellow at the bottom, blending into a seamless white surface that the subject appears to rest on, creating a bold, cheerful, and appetizing atmosphere . Lighting is bright, even, and diffused from multiple sources to minimize shadows, providing glossy highlights and uniform illumination that accentuates smooth surfaces and fine details. Use a medium depth of field to ensure the entire subject is in sharp focus, with high saturation and contrast in warm, inviting tones (rich yellows, golds, and browns) for a commercial appeal.  idealized advertising quality, immersive, and attention-grabbing, with no visible props or environmental elements beyond the yellow backdrop. Realistic 8k quality.",
+    "thumbnail": "burger",
+    "resultImage": "/filters/"
+  },
+  {
+    "id": "10",
+    "promptTitle": "Club lightings",
+    "prompt": "night club lightings 4k realistic",
+    "thumbnail": "club-lightings",
+    "resultImage": "https://images.pexels.com/photos/2403392/pexels-photo-2403392.jpeg"
+  },
+  {
+    "id": "11",
+    "promptTitle": "woody style",
+    "prompt": "Rustic food photography, warm and moody lighting with soft directional highlights, shallow depth of field, rich dark wooden background with visible grain and texture, natural imperfections in surface, centered composition with subtle asymmetry, earthy and warm color palette, emphasis on tactile textures (crust, sauce, greens), minimalistic styling with scattered seasonings or coarse salt for authenticity, high detail and clarity, professional studio quality, slightly desaturated tones for depth, intimate and inviting atmosphere.",
+    "thumbnail": "woody-style",
+    "resultImage": "https://www.solopress.com/blog/wp-content/uploads/2014/09/shutterstock_334960748.jpg"
+  },
+  {
+    "id": "12",
+    "promptTitle": "Futuristic",
+    "prompt": "Cinematic neon food photography, vibrant contrasting lighting with red and cyan hues, dramatic mood with glowing highlights and deep shadows, reflective wet surface creating mirror-like reflections, smoky atmosphere with floating particles, dark moody background featuring blurred vertical neon lights, high contrast and saturation, cinematic depth of field with sharp focus on subject, futuristic and edgy aesthetic, hyper-realistic textures, dynamic color grading with cool and warm tones clashing for visual impact, studio-quality lighting, surreal ambiance.",
+    "thumbnail": "futuristic",
+    "resultImage": "https://img.freepik.com/free-photo/close-up-street-food-neon-light_23-2151571756.jpg?semt=ais_hybrid&w=740&q=80"
+  },
+  {
+    "id": "13",
+    "promptTitle": "Clouds",
+    "prompt": "Surreal food photography, giant floating object suspended in a bright blue sky with fluffy white clouds, radiant sunlight from above creating soft highlights and lens flare, dynamic depth of field with sharp focus on central subject, scattered airborne particles resembling ingredients or crumbs drifting through the air, cinematic scale and perspective, vibrant and saturated colors, high detail and photorealistic textures, dreamlike and fantastical atmosphere, clear sky with dramatic cloud formations, wide-angle view, playful and imaginative composition, hyper-realistic rendering, outdoor daylight lighting with natural shadows and contrast.",
+    "thumbnail": "clouds",
+    "resultImage": "https://freeimage.host/i/Kd1Dyo7"
+  },
+  {
+    "id": "14",
+    "promptTitle": "Food Replacement",
+    "FiguresImagesUrls": [
+      "https://storage.googleapis.com/mon-resto-halal/restaurants/d8c9eadf-03e2-4941-b036-a00f3b6dcce5/thumb@512_d80a965e-bf3e-44f5-b6ce-d50acd88cf83.jpg"
+    ],
+    "prompt": "Edit the second image , Place the food object of the first image  instead of the food object of the second image",
+
+    "thumbnail": "burger",
+    "resultImage": "/filters/burger.webp"
+  }
+]

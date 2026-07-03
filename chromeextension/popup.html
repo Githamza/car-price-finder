@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    .file-upload {
+      margin: 15px 0;
+      width: 100%;
+    }
+    .apply-button {
+      width: 100%;
+      padding: 10px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .apply-button:hover {
+      background: #45a049;
+    }
+    .status {
+      margin-top: 10px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h3>Bubble.io Theme Updater</h3>
+  <input type="file" id="themeFile" accept=".json" class="file-upload">
+  <button id="applyTheme" class="apply-button">Update Colors</button>
+  <div id="status" class="status"></div>
+  <script src="content.js"></script>
+</body>
+</html>

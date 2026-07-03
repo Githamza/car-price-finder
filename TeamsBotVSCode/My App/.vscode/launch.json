@@ -1,0 +1,19 @@
+{
+    "version": "1.0.0",
+    "configurations": [
+        {
+            "name": "Debug (Teams Web Client)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "https://teams.microsoft.com/_#/l/app/e4126675-7e45-4eee-8d56-4fc6be3839b8?installAppPackage=true",
+            "webRoot": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug (Chrome)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "https://localhost:3000/tab",
+            "webRoot": "${workspaceFolder}"
+        }
+    ]
+}
