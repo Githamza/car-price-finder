@@ -11,38 +11,30 @@ import {
 import { LatLngBounds, PathOptions } from "leaflet";
 import { useTripData } from "../contexts/TripDataContext";
 import { formatDate, formatDistance, formatNumber } from "../utils/format";
-import { getTripsInBounds, getTripClusters } from "../map/clustering";
+import { useTripIndex, TripIndex, isClusterFeature } from "../hooks/useTripIndex";
+import { MIN_ZOOM_FOR_TRIPS, MAX_VISIBLE_TRIPS } from "../config";
 import {
   MapProps,
   MapEventHandlerProps,
   TripPopupProps,
-  ClusterPopupProps,
-  MapContentProps,
   Trip,
-  Cluster,
-  Bounds,
+  ClusterView,
 } from "../types";
 import teamWheelsLogo from "../assets/images/logo.png";
 
 // Center of France for initial map view
 const DEFAULT_CENTER: [number, number] = [46.603354, 1.888334];
 const DEFAULT_ZOOM = 6;
-const MAX_TRIPS_TO_DISPLAY = 600000;
 
-// Zoom thresholds for different detail levels
-const CLUSTER_GRID_SIZE_ZOOM: Record<number, number> = {
-  5: 1.5, // Very large grid at low zoom
-  6: 1, // Large grid
-  7: 0.5, // Medium grid
-  8: 0.25, // Smaller grid
-  9: 0.1, // Very small grid
-  10: 0.05, // Very small grid
-  11: 0.025, // Very small grid
-  12: 0.01, // Very small grid
-  13: 0.005, // Very small grid
-  14: 0.0025, // Very small grid
-};
-const MIN_ZOOM_FOR_TRIPS = 15; // Show individual trips only at zoom level 10+
+// The single controlled popup — content components mount only when open
+type OpenPopup =
+  | {
+      kind: "trip";
+      trip: Trip;
+      isEndPoint: boolean;
+      position: [number, number];
+    }
+  | { kind: "cluster"; cluster: ClusterView; position: [number, number] };
 
 // Component to track map events and bounds
 const MapEventHandler: React.FC<MapEventHandlerProps> = ({
@@ -68,7 +60,7 @@ const MapEventHandler: React.FC<MapEventHandlerProps> = ({
   return null;
 };
 
-// Component to create a popup content
+// Popup content for an individual trip
 const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
   return (
     <div className="popup-content">
@@ -108,59 +100,51 @@ const TripPopup: React.FC<TripPopupProps> = ({ trip, isEndPoint }) => {
           <strong>Passagers:</strong> {trip.passenger_seats}
         </p>
       )}
-      {/* Display GPS coordinates */}
-      {isEndPoint &&
-      trip.journey_end_lat !== undefined &&
-      trip.journey_end_lon !== undefined ? (
-        <p>
-          <strong>Coordonnées GPS:</strong> {trip.journey_end_lat.toFixed(6)},{" "}
-          {trip.journey_end_lon.toFixed(6)}
-        </p>
-      ) : !isEndPoint &&
-        trip.journey_start_lat !== undefined &&
-        trip.journey_start_lon !== undefined ? (
-        <p>
-          <strong>Coordonnées GPS:</strong> {trip.journey_start_lat.toFixed(6)},{" "}
-          {trip.journey_start_lon.toFixed(6)}
-        </p>
-      ) : null}
+      <p>
+        <strong>Coordonnées GPS:</strong>{" "}
+        {isEndPoint &&
+        trip.journey_end_lat !== undefined &&
+        trip.journey_end_lon !== undefined
+          ? `${trip.journey_end_lat.toFixed(3)}, ${trip.journey_end_lon.toFixed(3)}`
+          : `${trip.journey_start_lat.toFixed(3)}, ${trip.journey_start_lon.toFixed(3)}`}
+      </p>
     </div>
   );
 };
 
-// Component to create a cluster popup content
-const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
+// Popup content for a cluster — aggregates come from the supercluster index;
+// the operator-class breakdown is computed lazily, only when the popup opens
+const ClusterPopup: React.FC<{
+  cluster: ClusterView;
+  index: TripIndex | null;
+}> = ({ cluster, index }) => {
+  const { tripData } = useTripData();
   const map = useMap();
 
-  // Calculate average distance for trips in this cluster
-  const avgDistance =
-    cluster.trips.length > 0
-      ? cluster.trips.reduce(
-          (sum, trip) => sum + (trip.journey_distance || 0),
-          0
-        ) / cluster.trips.length
-      : 0;
+  const avgDistance = cluster.count > 0 ? cluster.sumDistance / cluster.count : 0;
 
-  // Calculate most common operator class (A/B/C)
-  const classCounts: Record<string, number> = {};
-  cluster.trips.forEach((trip) => {
-    const operatorClass = trip.operator_class || "N/A";
-    classCounts[operatorClass] = (classCounts[operatorClass] || 0) + 1;
-  });
-
-  let topOperatorClass = "N/A";
-  let maxCount = 0;
-
-  Object.entries(classCounts).forEach(([operatorClass, count]) => {
-    if (count > maxCount) {
-      maxCount = count;
-      topOperatorClass = operatorClass;
+  const topOperatorClass = useMemo(() => {
+    if (cluster.clusterId === null || !index) return null;
+    const counts: Record<string, number> = {};
+    for (const leaf of index.getLeaves(cluster.clusterId, 100)) {
+      const trip = tripData[leaf.properties.tripIndex];
+      if (trip?.operator_class) {
+        counts[trip.operator_class] = (counts[trip.operator_class] || 0) + 1;
+      }
     }
-  });
+    const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return best ? best[0] : null;
+  }, [cluster.clusterId, index, tripData]);
 
-  // Handle zoom in button
   const handleZoomClick = () => {
-    map.setView([cluster.lat, cluster.lon], MIN_ZOOM_FOR_TRIPS);
+    const targetZoom =
+      cluster.clusterId !== null && index
+        ? Math.min(
+            index.getClusterExpansionZoom(cluster.clusterId),
+            MIN_ZOOM_FOR_TRIPS
+          )
+        : MIN_ZOOM_FOR_TRIPS;
+    map.setView([cluster.lat, cluster.lon], targetZoom);
   };
 
   return (
@@ -168,14 +152,14 @@ const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
       <h3 className="text-lg font-bold mb-2">Zone de covoiturage</h3>
       <div className="space-y-1">
         <p>
-          <strong>Nombre de trajets:</strong> {cluster.count}
+          <strong>Nombre de trajets:</strong> {formatNumber(cluster.count)}
         </p>
         {avgDistance > 0 && (
           <p>
             <strong>Distance moyenne:</strong> {formatDistance(avgDistance)}
           </p>
         )}
-        {topOperatorClass !== "N/A" && (
+        {topOperatorClass && (
           <p>
             <strong>Classe d'opérateur principale:</strong> {topOperatorClass}
           </p>
@@ -191,20 +175,30 @@ const ClusterPopup: React.FC<ClusterPopupProps> = ({ cluster }) => {
   );
 };
 
-// Memoized map content component
+interface MapContentProps {
+  visibleTrips: Trip[];
+  visibleClusters: ClusterView[];
+  showIndividualTrips: boolean;
+  selectedTrip: Trip | null;
+  onTripClick: (trip: Trip) => void;
+  onOpenPopup: (popup: OpenPopup) => void;
+}
+
+// Memoized map content component — markers carry no mounted popups
 const MapContent: React.FC<MapContentProps> = React.memo(
   ({
     visibleTrips,
     visibleClusters,
     showIndividualTrips,
-    handleTripClick,
     selectedTrip,
+    onTripClick,
+    onOpenPopup,
   }) => {
     return (
       <>
-        {/* Display trip clusters when zoomed out */}
+        {/* Trip clusters when zoomed out */}
         {!showIndividualTrips &&
-          visibleClusters.map((cluster, idx) => {
+          visibleClusters.map((cluster) => {
             // Size based on number of trips in cluster (with a minimum)
             const radius = Math.max(
               5,
@@ -225,32 +219,30 @@ const MapContent: React.FC<MapContentProps> = React.memo(
 
             return (
               <CircleMarker
-                key={`cluster-${idx}`}
+                key={cluster.key}
                 center={[cluster.lat, cluster.lon]}
                 radius={radius}
                 pathOptions={clusterOptions}
                 eventHandlers={{
-                  click: (e) => {
-                    // Stop propagation to prevent map click
-                    e.originalEvent.stopPropagation();
+                  click: () => {
+                    onOpenPopup({
+                      kind: "cluster",
+                      cluster,
+                      position: [cluster.lat, cluster.lon],
+                    });
                   },
                 }}
-              >
-                <Popup>
-                  <ClusterPopup cluster={cluster} />
-                </Popup>
-              </CircleMarker>
+              />
             );
           })}
 
-        {/* Display individual trips only when zoomed in */}
+        {/* Individual trips when zoomed in */}
         {showIndividualTrips &&
           visibleTrips.map((trip) => {
-            // Check if this trip is the selected one
             const isSelected =
-              selectedTrip && selectedTrip.journey_id === trip.journey_id;
+              selectedTrip !== null &&
+              selectedTrip.journey_id === trip.journey_id;
 
-            // Styles for the markers and lines
             const startMarkerOptions: PathOptions = {
               fillColor: isSelected ? "#30c0ff" : "#3388ff",
               color: "#fff",
@@ -273,53 +265,66 @@ const MapContent: React.FC<MapContentProps> = React.memo(
               opacity: isSelected ? 0.8 : 0.5,
             };
 
+            const hasEnd =
+              trip.journey_end_lat !== undefined &&
+              trip.journey_end_lon !== undefined;
+
             return (
-              <React.Fragment key={trip.journey_id || Math.random().toString()}>
-                {/* Start point marker */}
+              <React.Fragment key={trip.journey_id}>
                 <CircleMarker
                   center={[trip.journey_start_lat, trip.journey_start_lon]}
                   radius={isSelected ? 7 : 5}
                   pathOptions={startMarkerOptions}
                   eventHandlers={{
-                    click: () => handleTripClick(trip),
+                    click: () => {
+                      onTripClick(trip);
+                      onOpenPopup({
+                        kind: "trip",
+                        trip,
+                        isEndPoint: false,
+                        position: [
+                          trip.journey_start_lat,
+                          trip.journey_start_lon,
+                        ],
+                      });
+                    },
                   }}
-                >
-                  <Popup>
-                    <TripPopup trip={trip} isEndPoint={false} />
-                  </Popup>
-                </CircleMarker>
+                />
 
-                {/* Trip line and end marker if end coordinates exist */}
-                {trip.journey_end_lat &&
-                  trip.journey_end_lon &&
-                  !isNaN(trip.journey_end_lat) &&
-                  !isNaN(trip.journey_end_lon) && (
-                    <>
-                      <Polyline
-                        positions={[
-                          [trip.journey_start_lat, trip.journey_start_lon],
-                          [trip.journey_end_lat, trip.journey_end_lon],
-                        ]}
-                        pathOptions={lineOptions}
-                        eventHandlers={{
-                          click: () => handleTripClick(trip),
-                        }}
-                      />
+                {hasEnd && (
+                  <>
+                    <Polyline
+                      positions={[
+                        [trip.journey_start_lat, trip.journey_start_lon],
+                        [trip.journey_end_lat!, trip.journey_end_lon!],
+                      ]}
+                      pathOptions={lineOptions}
+                      eventHandlers={{
+                        click: () => onTripClick(trip),
+                      }}
+                    />
 
-                      <CircleMarker
-                        center={[trip.journey_end_lat, trip.journey_end_lon]}
-                        radius={isSelected ? 5 : 3}
-                        pathOptions={endMarkerOptions}
-                        eventHandlers={{
-                          click: () => handleTripClick(trip),
-                        }}
-                      >
-                        <Popup>
-                          <TripPopup trip={trip} isEndPoint={true} />
-                        </Popup>
-                      </CircleMarker>
-                    </>
-                  )}
+                    <CircleMarker
+                      center={[trip.journey_end_lat!, trip.journey_end_lon!]}
+                      radius={isSelected ? 5 : 3}
+                      pathOptions={endMarkerOptions}
+                      eventHandlers={{
+                        click: () => {
+                          onTripClick(trip);
+                          onOpenPopup({
+                            kind: "trip",
+                            trip,
+                            isEndPoint: true,
+                            position: [
+                              trip.journey_end_lat!,
+                              trip.journey_end_lon!,
+                            ],
+                          });
+                        },
+                      }}
+                    />
+                  </>
+                )}
               </React.Fragment>
             );
           })}
@@ -334,76 +339,114 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
 
   const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
   const [currentBounds, setCurrentBounds] = useState<LatLngBounds | null>(null);
-  const [visibleTrips, setVisibleTrips] = useState<Trip[]>([]);
-  const [visibleClusters, setVisibleClusters] = useState<Cluster[]>([]);
+  const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
 
-  // Handle zoom level change
+  const index = useTripIndex(tripData);
+
   const handleZoomChange = useCallback((zoom: number) => {
     setCurrentZoom(zoom);
   }, []);
 
-  // Handle bounds change
   const handleBoundsChange = useCallback((bounds: LatLngBounds) => {
     setCurrentBounds(bounds);
   }, []);
 
-  // Update visible trips and clusters when bounds or zoom changes
-  useEffect(() => {
-    if (!currentBounds) return;
+  const showIndividualTrips = currentZoom >= MIN_ZOOM_FOR_TRIPS;
 
-    const boundsArray: Bounds = [
-      [currentBounds.getSouth(), currentBounds.getWest()],
-      [currentBounds.getNorth(), currentBounds.getEast()],
+  // One spatial-index query per view change — no full-array scans
+  const { visibleTrips, visibleClusters, totalTripsInView } = useMemo(() => {
+    if (!index || !currentBounds) {
+      return {
+        visibleTrips: [] as Trip[],
+        visibleClusters: [] as ClusterView[],
+        totalTripsInView: 0,
+      };
+    }
+
+    const bbox: [number, number, number, number] = [
+      currentBounds.getWest(),
+      currentBounds.getSouth(),
+      currentBounds.getEast(),
+      currentBounds.getNorth(),
     ];
+    const features = index.getClusters(bbox, Math.round(currentZoom));
 
     if (currentZoom >= MIN_ZOOM_FOR_TRIPS) {
-      setVisibleTrips(getTripsInBounds(tripData, boundsArray));
-      setVisibleClusters([]);
-    } else {
-      const zoomLevels = Object.keys(CLUSTER_GRID_SIZE_ZOOM).map(Number);
-      const nearestZoomLevel = zoomLevels.reduce((prev, curr) =>
-        Math.abs(curr - currentZoom) < Math.abs(prev - currentZoom)
-          ? curr
-          : prev
-      );
-      const gridSize = CLUSTER_GRID_SIZE_ZOOM[nearestZoomLevel] || 1;
-
-      setVisibleClusters(getTripClusters(tripData, boundsArray, gridSize));
-      setVisibleTrips([]);
+      // Above the cluster maxZoom every feature is an individual point
+      const trips: Trip[] = [];
+      for (const feature of features) {
+        if (!isClusterFeature(feature)) {
+          trips.push(tripData[feature.properties.tripIndex]);
+        }
+      }
+      return {
+        visibleTrips: trips.slice(0, MAX_VISIBLE_TRIPS),
+        visibleClusters: [] as ClusterView[],
+        totalTripsInView: trips.length,
+      };
     }
-  }, [currentBounds, currentZoom, tripData]);
+
+    const clusters: ClusterView[] = features.map((feature) => {
+      const [lon, lat] = feature.geometry.coordinates;
+      if (isClusterFeature(feature)) {
+        return {
+          key: `c${feature.id}`,
+          clusterId: feature.id as number,
+          lat,
+          lon,
+          count: feature.properties.point_count,
+          sumDistance: feature.properties.sumDistance,
+        };
+      }
+      const trip = tripData[feature.properties.tripIndex];
+      return {
+        key: `p${feature.properties.tripIndex}`,
+        clusterId: null,
+        lat,
+        lon,
+        count: 1,
+        sumDistance: trip.journey_distance,
+      };
+    });
+
+    return {
+      visibleTrips: [] as Trip[],
+      visibleClusters: clusters,
+      totalTripsInView: clusters.reduce((sum, c) => sum + c.count, 0),
+    };
+  }, [index, currentBounds, currentZoom, tripData]);
 
   // Update parent component with stats about the current map view
   useEffect(() => {
-    if (onStatsChange) {
-      onStatsChange({
-        zoom: currentZoom,
-        tripCount: visibleTrips.length,
-        clusterCount: visibleClusters.length,
-        totalTripsInView:
-          currentZoom >= MIN_ZOOM_FOR_TRIPS
-            ? visibleTrips.length
-            : visibleClusters.reduce((sum, cluster) => sum + cluster.count, 0),
-      });
-    }
-  }, [currentZoom, visibleTrips.length, visibleClusters.length, onStatsChange]);
+    onStatsChange({
+      zoom: currentZoom,
+      tripCount: visibleTrips.length,
+      clusterCount: visibleClusters.length,
+      totalTripsInView,
+    });
+  }, [
+    currentZoom,
+    visibleTrips.length,
+    visibleClusters.length,
+    totalTripsInView,
+    onStatsChange,
+  ]);
 
-  // Should we show individual trips based on zoom level?
-  const showIndividualTrips = currentZoom >= MIN_ZOOM_FOR_TRIPS;
-
-  // Handle trip line click
+  // Toggle trip selection
   const handleTripClick = useCallback(
     (trip: Trip) => {
-      // If the trip is already selected, clear the selection
       if (selectedTrip && selectedTrip.journey_id === trip.journey_id) {
         clearSelectedTrip();
       } else {
-        // Otherwise, select the trip
         selectTrip(trip);
       }
     },
     [selectedTrip, selectTrip, clearSelectedTrip]
   );
+
+  const handleOpenPopup = useCallback((popup: OpenPopup) => {
+    setOpenPopup(popup);
+  }, []);
 
   return (
     <div className="map-wrapper relative w-full h-screen">
@@ -434,6 +477,7 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
         scrollWheelZoom={true}
+        preferCanvas={true}
         fadeAnimation={false}
         className="absolute inset-0"
       >
@@ -451,9 +495,26 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
           visibleTrips={visibleTrips}
           visibleClusters={visibleClusters}
           showIndividualTrips={showIndividualTrips}
-          handleTripClick={handleTripClick}
           selectedTrip={selectedTrip}
+          onTripClick={handleTripClick}
+          onOpenPopup={handleOpenPopup}
         />
+
+        {openPopup && (
+          <Popup
+            position={openPopup.position}
+            eventHandlers={{ remove: () => setOpenPopup(null) }}
+          >
+            {openPopup.kind === "trip" ? (
+              <TripPopup
+                trip={openPopup.trip}
+                isEndPoint={openPopup.isEndPoint}
+              />
+            ) : (
+              <ClusterPopup cluster={openPopup.cluster} index={index} />
+            )}
+          </Popup>
+        )}
       </MapContainer>
 
       {/* Stats display */}
@@ -461,8 +522,11 @@ const Map: React.FC<MapProps> = ({ onStatsChange }) => {
         <div>Zoom: {currentZoom}</div>
         <div>
           {showIndividualTrips
-            ? `Trajets visibles: ${visibleTrips.length}`
-            : `Zones visibles: ${visibleClusters.length}`}
+            ? `Trajets visibles: ${formatNumber(visibleTrips.length)}` +
+              (totalTripsInView > visibleTrips.length
+                ? ` / ${formatNumber(totalTripsInView)}`
+                : "")
+            : `Zones visibles: ${formatNumber(visibleClusters.length)}`}
         </div>
       </div>
 

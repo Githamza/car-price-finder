@@ -3,6 +3,7 @@ import { useTripData } from "../contexts/TripDataContext";
 import MapLegend from "./MapLegend";
 import { InfoPanelProps } from "../types";
 import { formatNumber, formatDistance, formatDate } from "../utils/format";
+import { MIN_ZOOM_FOR_TRIPS } from "../config";
 
 const InfoPanel: React.FC<InfoPanelProps> = ({ mapStats }) => {
   const { isLoading, stats, fetchTripData, selectedTrip, clearSelectedTrip } =
@@ -25,18 +26,21 @@ const InfoPanel: React.FC<InfoPanelProps> = ({ mapStats }) => {
           <h3 className="text-sm font-semibold mb-1">Vue actuelle</h3>
           <div className="text-xs">
             <p>Zoom: {mapStats.zoom?.toFixed(1) || "N/A"}</p>
-            {mapStats.zoom < 10 && (
+            {mapStats.zoom < MIN_ZOOM_FOR_TRIPS ? (
               <p>Zones affichées: {formatNumber(mapStats.clusterCount)}</p>
-            )}
-            {mapStats.zoom >= 10 && (
+            ) : (
               <p>Trajets affichés: {formatNumber(mapStats.tripCount)}</p>
             )}
             <p className="text-gray-500 mt-1">
-              {mapStats.zoom < 10
-                ? "Zoom in pour voir les trajets individuels"
-                : `Affichage limité à ${formatNumber(
-                    mapStats.tripCount
-                  )} trajets pour des performances optimales`}
+              {mapStats.zoom < MIN_ZOOM_FOR_TRIPS
+                ? "Zoomez pour voir les trajets individuels"
+                : mapStats.totalTripsInView > mapStats.tripCount
+                  ? `Affichage limité à ${formatNumber(
+                      mapStats.tripCount
+                    )} trajets sur ${formatNumber(
+                      mapStats.totalTripsInView
+                    )} pour des performances optimales`
+                  : `${formatNumber(mapStats.totalTripsInView)} trajets dans la vue`}
             </p>
           </div>
         </div>

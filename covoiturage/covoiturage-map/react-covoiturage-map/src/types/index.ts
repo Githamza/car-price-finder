@@ -15,19 +15,15 @@ export interface Trip {
   passenger_seats: number;
 }
 
-// Cluster data structure
-export interface Cluster {
-  count: number;
+// A rendered cluster (or single unclustered point) from the spatial index
+export interface ClusterView {
+  key: string;
+  clusterId: number | null; // null for a single unclustered point
   lat: number;
   lon: number;
-  trips: Trip[];
+  count: number;
+  sumDistance: number; // meters, aggregated over the cluster's trips
 }
-
-// Map bounds structure
-export type Bounds = [
-  [number, number], // Southwest [lat, lng]
-  [number, number] // Northeast [lat, lng]
-];
 
 // Map stats structure
 export interface MapStats {
@@ -85,18 +81,6 @@ export interface MapEventHandlerProps {
 export interface TripPopupProps {
   trip: Trip;
   isEndPoint: boolean;
-}
-
-export interface ClusterPopupProps {
-  cluster: Cluster;
-}
-
-export interface MapContentProps {
-  visibleTrips: Trip[];
-  visibleClusters: Cluster[];
-  showIndividualTrips: boolean;
-  handleTripClick: (trip: Trip) => void;
-  selectedTrip: Trip | null;
 }
 
 export interface MapLegendProps {
